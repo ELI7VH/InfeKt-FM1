@@ -1,0 +1,64 @@
+InfeKt-FM1 1.19: credits and licences
+====================================
+
+InfeKt-FM1 (the synthesizer engine, the firmware's application, the web page) by J0KERPACK.
+The synthesizer's own source code will follow later.
+
+
+Sounds
+------
+Factory banks A and B (installed by the web page, optional):
+  Manuel Schleis (Vengeance Sound, https://www.vengeance-sound.com/)
+  Alan Marcero (https://alanmarcero.com/)
+  Sete
+Wavetables (nine waves, installed by the web page, optional): Sete.
+They are distributed with InfeKt-FM1 with their authors' permission.
+
+
+Platform (in the firmware)                                         licence: MPL-2.0, LICENSES/MPL-2.0.txt
+--------------------------
+fm1-base (https://github.com/charlesvestal/fm1-base): the platform layer, the update loader and the web installer's
+update code.
+  Charles Vestal: fm1-base and the platform layer of the FM-1 firmwares it comes from.
+  Leo Kuroshita (@kurogedelic, Hugelton Instruments): Felucca, which fm1-base grew from, and felucca-bsp.
+  Chris Farrell (@seajaysec): from fm-static, the finding of an FM-1 under any port name and the package checks of the
+  web installer.
+  keremimo: the MIDI clock and transport sync in felucca-bsp's usb.c.
+felucca-bsp (https://github.com/hugelton/felucca-bsp): the board support underneath.
+  Leo Kuroshita, Hugelton Instruments; the second core's code by Kerem Kilic (from Melodee); see
+  LICENSES/felucca-bsp-NOTICE.txt.
+The firmware is built from fm1-base and felucca-bsp with changes; their source as built is published as
+infekt-fm1-1.19-fm1-base-src.tar.gz (see SOURCE.txt;
+https://github.com/j0kerpack/InfeKt-FM1/tree/main/downloads).
+
+
+JieLi AC79 SDK (in the firmware package)                      licence: Apache-2.0, LICENSES/Apache-2.0.txt
+----------------------------------------
+Copyright (c) JIELI (Zhuhai Jieli Technology Co., Ltd.). The Bluetooth libraries (binary), the few SDK sources they
+need, and the package files uboot.boot, cfg_tool.bin and eq_cfg_hw.bin. The SDK carries no NOTICE file.
+
+
+Display font (in the firmware)                                licence: SIL OFL 1.1, LICENSES/OFL-1.1-Barlow.txt
+------------------------------
+Barlow Semi Condensed (Medium, SemiBold, Bold), copyright 2017 The Barlow Project Authors
+(https://github.com/jpt/barlow), rendered to bitmaps at build time. It is the only font in the firmware.
+
+
+m-bootloader (optional, firmware/m-bootloader-1.2.fwsc)       licence: MIT, firmware/m-bootloader-LICENSE.txt
+-------------------------------------------------------
+m-bootloader 1.2 by Julius Vitkauskas (https://github.com/jvitkauskas/m-bootloader). The same text is in
+LICENSES/MIT-m-bootloader.txt and inside the page.
+
+
+The page and the tools in this package
+--------------------------------------
+infekt-fm1.html: MPL-2.0, the page is its own source. It is built on fm1-base's web installer (the copyright lines
+at its top: Charles Vestal, Leo Kuroshita, Chris Farrell from fm-static).
+waves/vfwaves.py: J0KERPACK, GPL-3.0-only (LICENSES/GPL-3.0-only.txt).
+rescue/fm1_rescue.py: Charles Vestal (from fm1-x0x), MPL-2.0. rescue/fm1_infekt_uboot.py: J0KERPACK.
+The rescue tools download, when they run, JieLi's flash loader (checked by hash); it is not in this package.
+
+
+No warranty
+-----------
+Every part is provided "as is", without warranty of any kind; see each licence.
