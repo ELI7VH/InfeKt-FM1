@@ -489,6 +489,42 @@
                 box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 2px 0 #050506, 0 4px 10px rgba(0, 0, 0, .35); }
   a.btn:hover { filter: brightness(1.08); color: var(--fg); }
 
+  /* ---- the wait display (WAIT): over the visible tab while the FM-1 is written, its box at the tab's top (where the
+     button was pressed; the website's iframe has a fixed height, so nothing centred in the window); the steps with
+     their states, the running step's progress, then a closable end state ---- */
+  .tabpanel { position: relative; }
+  .waitov { position: absolute; z-index: 50; inset: -6px -8px; display: flex; justify-content: center; align-items: flex-start;
+            padding: 8px 8px 0; border-radius: var(--radius); background: rgba(8, 8, 10, .8); backdrop-filter: blur(3px); }
+  .waitbox { width: min(580px, 100%); padding: 22px 24px 20px; border-radius: 16px; border: 1px solid var(--red-lo);
+             background: linear-gradient(180deg, #232328, #17171a);
+             box-shadow: 0 0 0 1px rgba(224, 20, 28, .2), 0 0 36px rgba(224, 20, 28, .18), 0 30px 80px rgba(0, 0, 0, .7),
+                         inset 0 1px 0 rgba(255, 255, 255, .08); }
+  .waitbox:focus { outline: none; }
+  .waith { margin: 0 0 4px; font-size: 28px; line-height: 1.2; font-weight: 800; color: #fff; }
+  .waitt { margin: 0 0 16px; font-size: 16px; font-weight: 600; color: #ff6a60; }
+  .waitbox.done .waitt { color: var(--good); }
+  .waitbox.fail .waitt { color: var(--bad); }
+  .waitsteps { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 7px; }
+  .waitsteps li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; min-height: 26px; color: var(--dim); }
+  .wsi { position: relative; flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+         font: 700 12px/1 ui-monospace, Menlo, Consolas, monospace; border: 2px solid #3a3a42; color: var(--mute); }
+  .wsl { font-weight: 600; }
+  .wsd { margin-left: auto; font-size: 13.5px; text-align: right; font-variant-numeric: tabular-nums; }
+  .waitsteps li.ws-run { color: var(--fg); }
+  .waitsteps li.ws-run .wsi { border-color: var(--red-lo); color: var(--fg); }
+  .waitsteps li.ws-run .wsi::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid transparent;
+                                     border-top-color: var(--red-hi); animation: spin .9s linear infinite; }
+  .waitsteps li.ws-run .wsd { font-weight: 600; color: var(--fg); }
+  .waitsteps li.ws-done .wsi { border-color: var(--good); color: var(--good); }
+  .waitsteps li.ws-fail .wsi, .waitsteps li.ws-fail .wsd { border-color: var(--bad); color: var(--bad); }
+  .waitsteps li.ws-skip { opacity: .55; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .waitnow { display: flex; justify-content: space-between; gap: 10px; margin: 0; font-size: 14px; color: var(--dim);
+             font-variant-numeric: tabular-nums; }
+  #i-wait progress { height: 18px; margin: 4px 0 0; border-radius: 9px; }
+  .waitgo { margin: 18px 0 0; text-align: right; }
+  @media (max-width: 560px) { .waitbox { padding: 18px 16px 16px; } .waith { font-size: 24px; } .waitt { font-size: 15px; } }
+
   /* ---- "?": an explanation shown on hover, a click or a tap (Enter / Space), closed by Esc or a click outside; fixed
      over the page (placed by the script), so nothing moves ---- */
   .tip { display: inline-block; vertical-align: 1px; line-height: 1; }
@@ -662,6 +698,17 @@
 <section class="tabpanel" role="tabpanel" id="panel-install" aria-labelledby="tab-install" tabindex="0">
   <!-- five cards: on a wide window the status card lines up with "Report a problem" and the Ko-fi card, the install
        card with "Back to the stock firmware"; the explanations behind the "?" (.tip: hover, click or tap, Esc) -->
+  <!-- the wait display (WAIT: moved to the visible tab while it is shown) -->
+  <div id="i-wait" class="waitov" hidden>
+    <div class="waitbox" id="i-waitbox" role="dialog" aria-modal="false" aria-labelledby="i-waith" aria-describedby="i-waitt" tabindex="-1">
+      <h2 class="waith" id="i-waith"></h2>
+      <p class="waitt" id="i-waitt"></p>
+      <ol class="waitsteps" id="i-waitsteps"></ol>
+      <div id="i-waitnow"><p class="waitnow"><span id="i-waitk"></span><span id="i-waitpct"></span></p>
+        <progress id="i-waitbar" max="100" value="0" aria-labelledby="i-waitk"></progress></div>
+      <p class="waitgo" id="i-waitgo" hidden><button type="button" id="i-waitclose" data-t="w_close"></button></p>
+    </div>
+  </div>
   <div class="grid igrid">
     <div class="panel ic-inst">
       <h2><span data-t="i_h">Firmware installieren</span><span class="hsub"><span data-t="introshort"></span>
@@ -2583,6 +2630,11 @@ const TEXT = {
     fact_fail: "Firmware installiert, die Werkbänke aber nicht ({why}). Später: „Werkbänke installieren“.",
     fact_failonly: "Werkbänke nicht installiert ({why}).",
     fact_nodev: "das FM-1 hat sich nicht gemeldet", fact_nolink: "keine Verbindung zum FM-1",
+    w_h: "Bitte warten", w_t: "Das FM-1 nicht abziehen und diese Seite nicht schließen.",
+    w_doneh: "Fertig.", w_donet: "Das FM-1 kann jetzt abgezogen werden.", w_failh: "Nicht vollständig", w_close: "Schließen",
+    w_fw: "Firmware", w_fwboot: "Firmware und m-bootloader", w_restart: "Neustart", w_waves: "Setes Wellen",
+    w_banks: "Werkbänke A und B", w_step: "Schritt {k} von {n}", w_wave: "Welle {k}/{n}", w_bank: "Bank {bank} {k}/{n}",
+    w_s_wait: "wartet", w_s_run: "läuft", w_s_done: "fertig", w_s_fail: "fehlgeschlagen", w_s_skip: "übersprungen",
     seteshort: "Setes Wellen installieren (Wellen {a}–{b})",
     setewhy: "<b class=\"th\">Setes Wellen</b><ul><li>{n} Wellen, eigens für diesen Synth gestaltet</li><li class=\"tw\">Sie ersetzen die eingebauten Wellen ab seiner Nr. 03 (am FM-1: WAVE {a} bis WAVE {b})</li><li>Sinus und Dreieck bleiben</li><li>Wellen lassen sich im Tab Wavetables der Seite bearbeiten und ersetzen</li><li>Auch später möglich: „Setes Wellen installieren“ im Tab Wavetables</li><li>Weitere Wellen von Sete folgen</li></ul><span class=\"tp sep\"><b class=\"th2\">Dank</b><span class=\"tl\">Vielen Dank an den Gestalter dieser Wellen:</span><ul class=\"people\"><li><b>Sete</b> – Sounddesigner</li></ul></span>",
     setewarn: "Setes Wellen ersetzen eigene Wellen auf WAVE {a}–{b}.", setehas: " (Dort liegen jetzt {n} eigene.)",
@@ -2849,6 +2901,11 @@ const TEXT = {
     fact_fail: "Firmware installed, the factory banks not ({why}). Later: \"Install factory banks\".",
     fact_failonly: "Factory banks not installed ({why}).",
     fact_nodev: "the FM-1 did not answer", fact_nolink: "no connection to the FM-1",
+    w_h: "Please wait", w_t: "Do not unplug the FM-1 and do not close this page.",
+    w_doneh: "Done.", w_donet: "You can unplug the FM-1 now.", w_failh: "Not complete", w_close: "Close",
+    w_fw: "Firmware", w_fwboot: "Firmware and m-bootloader", w_restart: "Restart", w_waves: "Sete's wavetables",
+    w_banks: "Factory banks A and B", w_step: "Step {k} of {n}", w_wave: "Wave {k}/{n}", w_bank: "Bank {bank} {k}/{n}",
+    w_s_wait: "waiting", w_s_run: "running", w_s_done: "done", w_s_fail: "failed", w_s_skip: "skipped",
     seteshort: "Install Sete's wavetables (waves {a}–{b})",
     setewhy: "<b class=\"th\">Sete's wavetables</b><ul><li>{n} wavetables, created especially for this synth</li><li class=\"tw\">They replace the built-in wavetables from his no. 03 on (on the FM-1: WAVE {a} to WAVE {b})</li><li>Sine and triangle stay</li><li>Wavetables can be edited and replaced on the page's Wavetables tab</li><li>Also possible later: \"Install Sete's wavetables\" on the Wavetables tab</li><li>More wavetables by Sete will follow</li></ul><span class=\"tp sep\"><b class=\"th2\">Thanks</b><span class=\"tl\">With many thanks to the designer of these wavetables:</span><ul class=\"people\"><li><b>Sete</b> – sound designer</li></ul></span>",
     setewarn: "Sete's wavetables replace user waves on WAVE {a}–{b}.", setehas: " (You have {n} there now.)",
@@ -3461,6 +3518,91 @@ function factWarn() {                    /* the backup box's clause while the op
   }
 }
 relang.push(factWarn);
+/* the wait display over the visible tab while the FM-1 is written: an install (the firmware, its restart, then Sete's
+   waves and the factory banks) or a stand-alone write of the waves or the banks. The steps with their states (wait,
+   run, done, fail, skip), the running one's own line (its detail, else the status card's line) and the status card's
+   bar mirrored; then an end state with Close (done: the FM-1 may be unplugged; fail: the status card's failure text,
+   which names the button that repeats it). The status card, its bar and log stay as they are. */
+const WAIT = (() => {
+  const ov = $i("wait"), box = $i("waitbox"), LBL = { fw: "w_fw", fwboot: "w_fwboot", restart: "w_restart", waves: "w_waves", banks: "w_banks" };
+  let steps = [], state = "", detail = null, back = null, fresh = false;   /* state: "" (hidden), "run", "done", "fail";
+                                                                             fresh: nothing said since begin */
+  function place() {                     /* (at the top of the tab shown) */
+    if (!state) return;
+    const host = document.querySelector(".tabpanel:not([hidden])") || $("panel-install");
+    if (ov.parentNode !== host) host.prepend(ov);
+  }
+  function render() {
+    if (!state) return;
+    const run = steps.findIndex((s) => s.st === "run");
+    box.className = "waitbox " + state;
+    $i("waith").textContent = t(state === "run" ? "w_h" : state === "done" ? "w_doneh" : "w_failh");
+    $i("waitt").textContent = state === "run" ? t("w_t") : state === "done" ? t("w_donet")
+                              : $i("alert").textContent || $i("status").textContent || t("w_failh");
+    $i("waitsteps").replaceChildren(...steps.map((s, k) => {
+      const li = document.createElement("li"), i = document.createElement("span"), l = document.createElement("span"),
+            d = document.createElement("span"), sr = document.createElement("span");
+      li.className = "ws-" + s.st;
+      i.className = "wsi"; i.setAttribute("aria-hidden", "true");
+      i.textContent = s.st === "done" ? "✓" : s.st === "fail" ? "✕" : s.st === "skip" ? "–" : String(k + 1);
+      l.className = "wsl"; l.textContent = t(LBL[s.key]);
+      d.className = "wsd";
+      d.textContent = s.st === "run" ? (detail ? detail() : (!fresh && $i("status").textContent) || t("w_s_run")) : t("w_s_" + s.st);
+      sr.className = "sr"; sr.textContent = s.st === "run" ? " (" + t("w_s_run") + ")" : "";
+      li.append(i, l, sr, d);
+      return li;
+    }));
+    const v = Math.max(0, Math.min(100, +$i("bar").value || 0));
+    $i("waitnow").hidden = state !== "run";
+    $i("waitk").textContent = run >= 0 ? t("w_step", { k: run + 1, n: steps.length }) : "";
+    $i("waitpct").textContent = Math.round(v) + " %";
+    $i("waitbar").value = v;
+    $i("waitgo").hidden = state === "run";
+  }
+  function close() {
+    if (!state || state === "run") return;
+    state = ""; ov.hidden = true;
+    if (back && back.isConnected && !back.disabled) try { back.focus({ preventScroll: true }); } catch (_) { /* (none) */ }
+  }
+  $i("waitclose").addEventListener("click", close);
+  ov.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  new MutationObserver(render).observe($i("bar"), { attributes: true });   /* (the bar's value: a reflected attribute) */
+  relang.push(render);
+  const tabs = new MutationObserver(place);              /* (another tab shown: the display goes along) */
+  document.querySelectorAll(".tabpanel").forEach((p) => tabs.observe(p, { attributes: true, attributeFilter: ["hidden"] }));
+  return {
+    get busy() { return state === "run"; },
+    get state() { return state; },
+    has: (key) => state === "run" && steps.some((s) => s.key === key),
+    /* a new display: the steps' keys in order, the first running */
+    begin(keys) {
+      back = document.activeElement;
+      steps = keys.map((key, k) => ({ key, st: k ? "wait" : "run" }));
+      state = "run"; detail = null; fresh = true;
+      place(); ov.hidden = false; render();
+      try { box.scrollIntoView({ block: "nearest" }); box.focus({ preventScroll: true }); } catch (_) { /* (no layout) */ }
+    },
+    step(key, st) {                      /* a step's state (the running one's detail cleared) */
+      const s = state === "run" && steps.find((x) => x.key === key);
+      if (!s || s.st === st) return;
+      s.st = st; detail = null; render();
+    },
+    detail(fn) { if (state === "run") { detail = fn; render(); } },
+    /* the end, by any path: a step still running failed when !ok (else done), the ones waiting skipped (with !ok and
+       no failure yet, the first of them failed); then done or fail, closable */
+    end(ok = true) {
+      if (state !== "run") return;
+      for (const s of steps) if (s.st === "run") s.st = ok ? "done" : "fail";
+      if (!ok && !steps.some((s) => s.st === "fail")) { const s = steps.find((x) => x.st === "wait"); if (s) s.st = "fail"; }
+      for (const s of steps) if (s.st === "wait") s.st = "skip";
+      state = steps.some((s) => s.st === "fail") ? "fail" : "done"; detail = null;
+      render();
+      try { $i("waitclose").focus({ preventScroll: true }); } catch (_) { /* (none) */ }
+    },
+    said() { fresh = false; render(); },   /* (the status card's line changed) */
+    place, close,
+  };
+})();
 const iLog = logTo($i("log"));
 /* what happens goes to two regions: the status (polite) the steps and the progress, the alert a failure */
 const FAILS = new Set(["nomidi", "loadfail", "stopped", "error", "denied", "notfound", "model", "lost", "noloader",
@@ -3469,11 +3611,12 @@ let lastKey = null, lastArg = "", lastPct = null, lastRaw = null, lastBad = fals
 const DKEYS = new Set(["open", "flash", "bootflash", "oldflash"]);   /* (the detail in the text's {d}; else after it) */
 const textOf = (k, arg, pct) => (DKEYS.has(k) ? t(k, { d: arg }) : t(k) + arg) + (pct == null ? "" : t("pct", { n: pct }));
 function show() {
-  if (lastRaw != null) { $i("alert").textContent = ""; $i("status").textContent = lastRaw; return; }
+  if (lastRaw != null) { $i("alert").textContent = ""; $i("status").textContent = lastRaw; WAIT.said(); return; }
   if (!lastKey) return;
   const txt = typeof lastKey === "function" ? lastKey() : textOf(lastKey, lastArg, lastPct);
   if (FAILS.has(lastKey) || lastBad) { $i("status").textContent = ""; $i("alert").textContent = txt; }
   else { $i("alert").textContent = ""; $i("status").textContent = txt; }
+  WAIT.said();                           /* (the wait display's line) */
 }
 relang.push(show);
 const sayK = (k, arg = "") => { lastRaw = null; lastBad = false; lastKey = k; lastArg = arg; lastPct = null; show(); };
@@ -3515,7 +3658,7 @@ const appUi = {
 $i("bakok").addEventListener("change", () => { $i("confirmgo").disabled = !$i("bakok").checked; });
 $i("fact").addEventListener("change", factWarn);
 $i("waves").addEventListener("change", factWarn);
-window.addEventListener("beforeunload", (e) => { if (DEV.writing) { e.preventDefault(); e.returnValue = t("leave"); } });
+window.addEventListener("beforeunload", (e) => { if (DEV.writing || WAIT.busy) { e.preventDefault(); e.returnValue = t("leave"); } });
 
 function showFw() {                      // the firmware about to be installed: its display and the button
   const has = !!I.image;
@@ -3639,7 +3782,15 @@ function confirmed(withBoot) {
   return new Promise((r) => d.addEventListener("close", () => r(d.returnValue === "go"), { once: true }));
 }
 
+/* an install with the wait display, which ends by every path (a step still running then failed unless all went well) */
 async function run(img, product, isStock, sha256) {
+  if (DEV.writing || WAIT.busy) return;
+  let ok = false;
+  try { ok = await runInstall(img, product, isStock, sha256); }
+  finally { WAIT.end(ok === true); }
+}
+/* -> true: everything asked for done (the firmware; Sete's waves and the factory banks when ticked) */
+async function runInstall(img, product, isStock, sha256) {
   if (DEV.writing) return;
   const withBoot = !isStock && !!I.boot && $i("mboot").checked, withFact = !isStock && factOn(), withSete = !isStock && seteOn();
   $i("factrow").hidden = $i("wavesrow").hidden = true;
@@ -3657,10 +3808,12 @@ async function run(img, product, isStock, sha256) {
   if (!livePair() || (DEV.state !== "ok" && DEV.state !== "update")) {   /* only to a verified FM-1 (its identity) */
     sayK("notfound"); showPorts(midi); return;
   }
+  const fwKey = withBoot ? "fwboot" : "fw";
+  WAIT.begin([fwKey, "restart", ...(withSete ? ["waves"] : []), ...(withFact ? ["banks"] : [])]);
   lockDev(true);
   $i("portpick").hidden = true;
   $i("go").disabled = $i("stockgo").disabled = true;
-  let installed = false;
+  let installed = false, stockOk = false;
   try {
     const up = updater(midi, iLog);
     if (DEV.manual) up.allow(DEV.manual);
@@ -3682,6 +3835,8 @@ async function run(img, product, isStock, sha256) {
       if (k === "done" && !withBoot) { $i("bar").value = 100; sayK(isStock ? "stockdone" : "done"); }
       if (k === "bootstart" || k === "bootwrite") sayK(k);
       if (k === "bootdone") { $i("bar").value = 100; sayK("bootdone"); }
+      if ((k === "reboot" && !withBoot) || k === "bootwrite") { WAIT.step(fwKey, "done"); WAIT.step("restart", "run"); }
+      if ((k === "done" && !withBoot) || k === "bootdone") { WAIT.step(fwKey, "done"); WAIT.step("restart", "done"); }
     };
     const ota = await up.find((id) => FW.IS_OTA(id));
     if (ota) {
@@ -3699,12 +3854,15 @@ async function run(img, product, isStock, sha256) {
       installed = true;
     }
   } catch (e) {
-    if (isStock && e && e.code === "mismatch") { $i("bar").value = 100; sayK("stockdone"); }   /* stock names itself its own way */
+    if (isStock && e && e.code === "mismatch") {   /* stock names itself its own way */
+      $i("bar").value = 100; sayK("stockdone"); stockOk = true; WAIT.step(fwKey, "done"); WAIT.step("restart", "done");
+    }
     else if (e && e.code && TEXT[lang][e.code]) sayK(e.code, e.detail || "");
     else sayK("error", e && e.message);
     if (e && e.code === "notfound") showPorts(midi);
     iLog(String(e && e.stack || e));
   }
+  if (installed) { WAIT.step(fwKey, "done"); WAIT.step("restart", "done"); }   /* (the FM-1 answered with it) */
   if (installed && APP && APP.after && !isStock) {
     try { await APP.after(midi, appUi, appState); }
     catch (e) { say(String(e && e.message || e)); iLog(String(e && e.stack || e)); }
@@ -3712,11 +3870,15 @@ async function run(img, product, isStock, sha256) {
   lockDev(false);
   $i("go").disabled = !I.image;
   $i("stockgo").disabled = !I.stock;
-  let seteOk = true;                      /* Sete's waves and the factory banks once the new firmware answers */
+  let seteOk = true, factOk = true;       /* Sete's waves and the factory banks once the new firmware answers */
   if (installed && withSete) seteOk = await seteRun(midi, true);
-  if (installed && withFact && (await factoryRun(midi, true)) && !seteOk) sayFn(() => t("sete_fail", { why: seteWhy }), true);   /* (the
-                                          * waves' failure said again after the banks' success) */
+  if (installed && withFact) {
+    factOk = await factoryRun(midi, true);
+    if (factOk && !seteOk) sayFn(() => t("sete_fail", { why: seteWhy }), true);   /* (the waves' failure said again
+                                                                                     after the banks' success) */
+  }
   scan();                                 /* the version it runs now, in the header */
+  return (installed || stockOk) && seteOk && factOk;
 }
 /* after an install: the FM-1 found again with this firmware (waited for while it restarts), then the page's links
    again (scan). -> true when it answers */
@@ -3735,9 +3897,11 @@ async function ownAgain(midi, after) {
    after): after an install as the factory banks, or on its own (the button: asked first) */
 let seteWhy = "";
 async function seteRun(midi, after) {
-  if (!SETE || DEV.writing || wv.busy) return false;
+  if (!SETE || DEV.writing || wv.busy || (!after && WAIT.busy)) return false;
   if (!after && !window.confirm(t("seteask", seteV()))) return false;
+  if (after) WAIT.step("waves", "run"); else WAIT.begin(["waves"]);   /* (on its own: its own wait display) */
   const fail = (why) => {
+    WAIT.step("waves", "fail");
     seteWhy = typeof why === "function" ? why() : why;
     sayFn(() => t(after ? "sete_fail" : "sete_failonly", { why: typeof why === "function" ? why() : why }), true);
     iLog("sete waves: " + (typeof why === "function" ? why() : why));
@@ -3752,24 +3916,28 @@ async function seteRun(midi, after) {
     $i("bar").value = 0;
     const r = await wv.writeSet(SETE.waves, (k, n, w) => {
       $i("bar").value = Math.round((k / n) * 100);
+      WAIT.detail(() => t("w_wave", { k, n }));
       sayFn(() => t("sete_prog", { k, n }));
       iLog(`sete waves: ${k}/${n} WAVE ${w.slot} ${w.name}`);
     });
     if (!r.ok) return fail(r.why || (() => t("fact_nolink")));
     $i("bar").value = 100;
+    WAIT.step("waves", "done");
     sayFn(() => t("sete_done", { n: SETE.waves.length }));
     return true;
   } catch (e) { return fail(String(e && e.message || e)); }
-  finally { $i("wavesgo").disabled = $w("setego").disabled = false; factWarn(); }
+  finally { $i("wavesgo").disabled = $w("setego").disabled = false; factWarn(); if (!after) WAIT.end(); }
 }
 $i("wavesgo").addEventListener("click", () => seteRun(null, false));
 /* the factory banks into banks A and B, by the patch manager's write (its queue, the upload, the flash write, the names
    read back): after an install (after: the FM-1 waited for as it restarts; a failure leaves the firmware installed and
    offers the button) or on its own (the button: asked first) */
 async function factoryRun(midi, after) {
-  if (!FACT || DEV.writing || org.busy) return false;
+  if (!FACT || DEV.writing || org.busy || (!after && WAIT.busy)) return false;
   if (!after && !window.confirm(t("factask"))) return false;
+  if (after) WAIT.step("banks", "run"); else WAIT.begin(["banks"]);   /* (on its own: its own wait display) */
   const fail = (why) => {
+    WAIT.step("banks", "fail");
     sayFn(() => t(after ? "fact_fail" : "fact_failonly", { why: typeof why === "function" ? why() : why }), true);
     iLog("factory banks: " + (typeof why === "function" ? why() : why));
     $i("factrow").hidden = false;
@@ -3786,16 +3954,18 @@ async function factoryRun(midi, after) {
     const r = await org.writeFactory(FACT, (b, k, n) => {
       done++;
       $i("bar").value = Math.round((done / total) * 100);
+      WAIT.detail(() => t("w_bank", { bank: BK.dumpLetter(b), k, n }));
       sayFn(() => t("fact_prog", { bank: BK.dumpLetter(b), k, n }));
       if (k === 1 || k % 32 === 0 || k === n) iLog(`factory banks: bank ${BK.dumpLetter(b)} ${k}/${n}`);
     });
     if (!r.ok) return fail(r.why || (() => t("fact_nolink")));
     $i("bar").value = 100;
+    WAIT.step("banks", "done");
     sayFn(() => t(after ? "fact_done" : "fact_doneonly"));
     iLog("factory banks: written and read back");
     return true;
   } catch (e) { return fail(String(e && e.message || e)); }
-  finally { $i("factgo").disabled = $("org-factgo").disabled = false; }
+  finally { $i("factgo").disabled = $("org-factgo").disabled = false; if (!after) WAIT.end(); }
 }
 $i("factgo").addEventListener("click", () => factoryRun(null, false));
 $i("go").addEventListener("click", () => { if (I.image) run(I.image, I.product, false); });
