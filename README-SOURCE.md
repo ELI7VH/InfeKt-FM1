@@ -57,9 +57,7 @@ host build.
 - Factory banks: the firmware has none (banks A and B stay empty; the player's six banks hold the patches).
 - The development notes, the measured targets and their results, the test banks used during development, and the
   host tests that played them: private working material, or other people's sounds.
-- Held back: `engine/sy_hyb_lfow.c` (the LFO shapes 6-67) and `engine/sy_arp_tab.c` (the arpeggiator's patterns
-  1-61), two measured content tables. The engine and the firmware do not build without them until they are replaced
-  or released.
+
 
 The firmware links JieLi's binary Bluetooth libraries from the AC79 SDK (Apache-2.0) through fm1-base; see
 `LICENSE-ADDITIONAL-PERMISSION.md`.
