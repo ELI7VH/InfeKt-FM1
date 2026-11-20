@@ -1,0 +1,13 @@
+{
+  "what": "A virtual analog synthesizer: three oscillators per voice, two multimode filters, three LFOs, a modulation matrix, up to 16 voices and two parts as layer or split. With effects and a shimmer reverb, an arpeggiator, a sequencer played from the keys and a drum machine.",
+  "author": "J0KERPACK",
+  "kinds": [
+    "synth"
+  ],
+  "play": "https://j0kerpack.github.io/InfeKt-FM1/try.html",
+  "editor": "https://j0kerpack.github.io/InfeKt-FM1/app.html",
+  "cheat": "https://j0kerpack.github.io/InfeKt-FM1/downloads/InfeKt-FM1_Quickstart_EN.pdf",
+  "image": "docs/img/screen.png",
+  "color": "#FF3B33",
+  "sounds": "licensed: factory sound banks by Manuel Schleis (Vengeance Sound), Alan Marcero and Sete and wavetables by Sete, shared with their permission for this firmware; hi-hat samples recorded by the author"
+}
