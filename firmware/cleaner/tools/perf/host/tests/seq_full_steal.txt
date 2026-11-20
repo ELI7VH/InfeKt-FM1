@@ -1,0 +1,95 @@
+# requires: nofactory multi
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# 1.18C34 (the user's report: an arp pattern with all 16 steps on was silent, with 15 it played): every step on
+# (NOTE, LENGTH 1/16, the same pitch) ends each note in the tick the next one starts, so each step boundary is one
+# key's note-off and note-on in one block. The engine takes a block's note-ons first (synth.c EV_ONS_FIRST); the
+# off then ends only the voices that were there before. When the note-on had to take the old note's own voice (the
+# part has no other: here VOICES A 1, FIXED; also a governor or MAX VOICES that leaves a part one voice) no voice
+# was "before" any more and the off ended the new note at once: no step sounded. Now an off that came before a
+# note-on of its key in the block ends the voices before the block alone (none left: nothing). (The init patch, the
+# drums NONE so the level is the arp sequencer's)
+wait 1500
+listen
+mxmode 1
+mxset dyn 0
+mxset nva 1
+wait 200
+vact
+tap SEQ
+wait 300
+tap SEQ
+wait 300
+tap SEQ
+wait 300
+pageis 11 0 1
+turn K3 -1
+wait 300
+tap SEQ
+wait 300
+pageis 10 0 0
+echo == all 16 steps on (as shipped 1 5 9 13): each step's note sounds, gated, through the loop
+tapkey w1
+tapkey w2
+tapkey w3
+tapkey w5
+tapkey w6
+tapkey w7
+tapkey w9
+tapkey w10
+tapkey w11
+tapkey w13
+tapkey w14
+tapkey w15
+wait 600
+sqis 1111111111111111
+press PLAY
+release PLAY
+wait 1037
+gset 60
+wait 211
+gset 60
+wait 389
+gset 60
+wait 97
+gset 60
+rmsreset
+wait 2000
+rmsis -45 0
+press PLAY
+release PLAY
+wait 600
+bal full-stop
+echo == 15 steps on: as before (every note sounds)
+tapkey w10
+wait 600
+press PLAY
+release PLAY
+wait 1037
+gset 60
+wait 211
+gset 60
+rmsreset
+wait 2000
+rmsis -45 0
+press PLAY
+release PLAY
+wait 600
+bal gap-stop
+echo == VOICES A 8 (two voices and more: the old note's voice is not taken) and all 16 on: the same
+tapkey w10
+mxset nva 8
+wait 600
+press PLAY
+release PLAY
+wait 1037
+gset 60
+wait 211
+gset 60
+rmsreset
+wait 2000
+rmsis -45 0
+press PLAY
+release PLAY
+wait 600
+bal nva8-stop

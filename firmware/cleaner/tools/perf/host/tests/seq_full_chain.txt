@@ -1,0 +1,93 @@
+# requires: nofactory multi
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# 1.18C34, the user's setup (GLO > MULTI SPLIT, B below C4, ALLOC DYNAMIC, VOICES A 8 B 8; the init patch): an arp
+# pattern with all 16 steps on fell silent for good once its note had been ended from outside, and played again
+# only with a step off. Each step boundary is one key's note-off and note-on in one block (the engine: the ons
+# first, the off then ends the voices from before the block). A note ended early (the overload guard's shedding at
+# a load peak, a patch change while it runs: sy_all_off) left no gated voice from before, so the off ended the
+# new note too; that one left none for the next boundary, and so on round the loop. A step off broke the chain
+# once a loop. Now (synth.c off_pre) the off ends only the voices before its place in the queue: the next step
+# sounds again. (The drums NONE: the level is the arp sequencer's)
+wait 1500
+listen
+ubput C001 Alpha 10
+mxgv mode 2
+mxgv split 60
+wait 200
+vact
+tap SEQ
+wait 300
+tap SEQ
+wait 300
+tap SEQ
+wait 300
+pageis 11 0 1
+turn K3 -1
+wait 300
+tap SEQ
+wait 300
+pageis 10 0 0
+tapkey w1
+tapkey w2
+tapkey w3
+tapkey w5
+tapkey w6
+tapkey w7
+tapkey w9
+tapkey w10
+tapkey w11
+tapkey w13
+tapkey w14
+tapkey w15
+wait 600
+sqis 1111111111111111
+press PLAY
+release PLAY
+wait 1000
+rmsreset
+wait 500
+rmsis -45 0
+echo == a load peak of 30 ms: the guard sheds the note; the next step sounds again, and on
+hload 99
+wait 30
+hload -1
+wait 500
+grdis 1
+rmsreset
+wait 2000
+rmsis -45 0
+gset 60
+wait 211
+gset 60
+echo == stopped and started again (a fresh start: sounding in either build)
+press PLAY
+release PLAY
+wait 600
+press PLAY
+release PLAY
+wait 1000
+rmsreset
+wait 500
+rmsis -45 0
+echo == a patch change while it runs (A001, then INIT again: each ends the notes): the steps sound again
+tap HOME
+wait 300
+spin PRESET 1
+wait 300
+turn PRESET 1
+wait 1500
+patchis A001 0 1
+turn PRESET -1
+wait 1500
+patchis INIT 0 1
+rmsreset
+wait 2000
+rmsis -45 0
+gset 60
+wait 211
+gset 60
+press PLAY
+release PLAY
+wait 600
+bal chain-stop

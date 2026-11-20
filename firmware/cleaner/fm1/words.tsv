@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# The firmware's words for a screen reader (fm1-reader): the text on the screen <TAB> what to say.
+# (no site yet: the reader takes the words from the url once there is one)
+# url: https://localhost/hybrid/words/
+HYBRID	hybrid

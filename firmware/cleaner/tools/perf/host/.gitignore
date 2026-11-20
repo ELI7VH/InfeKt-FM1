@@ -1,0 +1,3 @@
+# the host simulator's test outputs (screenshots, the MIDI out log)
+*.png
+midi_out.txt

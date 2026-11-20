@@ -1,0 +1,164 @@
+diff -ru a/crates/fm1-emu/src/main.rs b/crates/fm1-emu/src/main.rs
+--- a/crates/fm1-emu/src/main.rs	2026-11-15 22:17:31.568530338 +0000
++++ b/crates/fm1-emu/src/main.rs	2026-11-15 22:53:39.778081969 +0000
+@@ -468,6 +468,30 @@
+     let extra_breaks: Vec<u32> = std::env::var("FM1_BREAK_PCS").ok()
+         .map(|v| v.split(',').filter_map(|x| u32::from_str_radix(x.trim().trim_start_matches("0x"), 16).ok()).collect())
+         .unwrap_or_default();
++    // FM1_PC_LIMIT=1 (or =halt): the chip's PC limit (corex2 PC_LIMIT0/1, fm1_guard.h), which this emulator does not
++    // otherwise enforce: once PC_LIMIT0_H is set, every fetch of either core must lie in [L0, H0] or [L1, H1]; one
++    // outside is a fault on the device. Reported ("pc-limit: VIOLATION ..."), =halt stops there. Every write to the
++    // windows is printed ("pc-limit: write ...").
++    let pcl_mode: Option<bool> = std::env::var("FM1_PC_LIMIT").ok().map(|v| v == "halt");
++    let mut pcl_seen = 0usize;
++    let mut pcl_viol: u64 = 0;
++    let mut pcl_shown: std::collections::BTreeSet<u32> = Default::default();
++    // FM1_EXEC_WATCH=LO:HI (hex): code run from RAM it was copied into at run time (a swap slot): the range's words
++    // each time a fetch enters it at LO with contents not seen at the last entry ("exec-watch: ..."), the first fetch
++    // anywhere in it too: a script compares them with what should have been copied (rv_slot_run_check.py)
++    let exec_watch: Option<(u32, u32)> = std::env::var("FM1_EXEC_WATCH").ok().and_then(|v| {
++        let (a, b) = v.split_once(':')?;
++        Some((u32::from_str_radix(a.trim().trim_start_matches("0x"), 16).ok()?, u32::from_str_radix(b.trim().trim_start_matches("0x"), 16).ok()?))
++    });
++    let mut ew_last: Option<u64> = None;
++    let mut ew_entries: u64 = 0;
++    let mut ew_prints = 0u32;
++    // FM1_PC_HIST_AT=MS,MS,..: the PC histogram so far also written at those emulated times (FM1_PC_HIST's path
++    // with ".MS" appended): one run gives the windows between them (a chord's first blocks against the steady ones)
++    let mut hist_at: Vec<u64> = std::env::var("FM1_PC_HIST_AT").ok()
++        .map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()).unwrap_or_default();
++    hist_at.sort_unstable();
++    let mut hist_tick = 0u32;
+     let mut last_pc = cpus[0].pc;
+     let mut total_steps: u64 = 0;
+     let mut ring: Vec<u32> = Vec::new();
+@@ -519,6 +543,21 @@
+                 }
+             }
+         }
++        if !hist_at.is_empty() {
++            hist_tick += 1;
++            if hist_tick >= 256 {
++                hist_tick = 0;
++                if soc.periph.ms() >= hist_at[0] {
++                    let at = hist_at.remove(0);
++                    if let Ok(path) = std::env::var("FM1_PC_HIST") {
++                        let mut s = String::new();
++                        for (pc, n) in pchist.iter() { s.push_str(&format!("{pc:x} {n}\n")); }
++                        for (i, &n) in xip_hist.iter().enumerate() { if n > 0 { s.push_str(&format!("{:x} {n}\n", XIP_BASE + 2 * i as u32)); } }
++                        let _ = std::fs::write(format!("{path}.{at}"), s);
++                    }
++                }
++            }
++        }
+         if usb_on {
+             usb_tick += 1;
+             if usb_tick >= 4096 {
+@@ -572,6 +611,42 @@
+                 }
+                 continue;
+             }
++            if let Some(halt_on) = pcl_mode {
++                while pcl_seen < soc.pc_limit_log.len() {
++                    let (a, v, ms) = soc.pc_limit_log[pcl_seen];
++                    pcl_seen += 1;
++                    println!("pc-limit: write {a:#010x} = {v:#010x} at {ms} ms (c{} pc {:#010x})", cpu.core_id, cpu.pc);
++                }
++                let l = soc.pc_limit;
++                let pc = cpu.pc;
++                if l[0] != 0 && !((l[1]..=l[0]).contains(&pc) || (l[3]..=l[2]).contains(&pc)) {
++                    pcl_viol += 1;
++                    if pcl_shown.len() < 16 && pcl_shown.insert(pc) {
++                        println!("pc-limit: VIOLATION c{} pc={pc:#010x} at {} ms [{total_steps}] windows [{:#010x}, {:#010x}] [{:#010x}, {:#010x}]",
++                                 cpu.core_id, soc.periph.ms(), l[1], l[0], l[3], l[2]);
++                    }
++                    if halt_on {
++                        report_core = ci;
++                        stop = true;
++                        break;
++                    }
++                }
++            }
++            if let Some((lo, hi)) = exec_watch {
++                let pc = cpu.pc;
++                if (lo..hi).contains(&pc) && (pc == lo || ew_last.is_none()) {
++                    ew_entries += 1;
++                    let words: Vec<u32> = (lo..hi).step_by(4).map(|a| soc.read32(a)).collect();
++                    let mut h: u64 = 0xcbf29ce484222325;
++                    for w in &words { h = (h ^ *w as u64).wrapping_mul(0x100000001b3); }
++                    if ew_last != Some(h) && ew_prints < 64 {
++                        ew_prints += 1;
++                        println!("exec-watch: c{} pc={pc:#010x} at {} ms [{total_steps}] entry {ew_entries} hash {h:016x} words {}",
++                                 cpu.core_id, soc.periph.ms(), words.iter().map(|w| format!("{w:08x}")).collect::<Vec<_>>().join(" "));
++                    }
++                    ew_last = Some(h);
++                }
++            }
+             if (Some(cpu.pc) == args.break_pc || extra_breaks.contains(&cpu.pc)) && break_hits < break_max {
+                 break_hits += 1;
+                 println!("break c{} pc={:#010x} [{}] sp={:#010x} rets={:#010x} irq_levels={:?} r0-11={:x?}", cpu.core_id, cpu.pc, total_steps, cpu.sp, cpu.rets, cpu.irq_levels, &cpu.regs[..12]);
+@@ -870,6 +945,13 @@
+         }
+         let _ = stopped;
+     }
++    if pcl_mode.is_some() {
++        println!("pc-limit: {} violations; windows at the end [{:#010x}, {:#010x}] [{:#010x}, {:#010x}]", pcl_viol,
++                 soc.pc_limit[1], soc.pc_limit[0], soc.pc_limit[3], soc.pc_limit[2]);
++    }
++    if let Some((lo, hi)) = exec_watch {
++        println!("exec-watch: {:#010x}..{:#010x} entered {} times", lo, hi, ew_entries);
++    }
+     if let Ok(f) = std::env::var("FM1_HALF_OUT") { let _ = std::fs::write(f, &half_out); }
+     // local: FM1_DUMPS=NAME@ADDR:N;... one line of N words each at the end
+     for item in std::env::var("FM1_DUMPS").unwrap_or_default().split(';').filter(|x| !x.is_empty()) {
+diff -ru a/crates/fm1-soc/src/lib.rs b/crates/fm1-soc/src/lib.rs
+--- a/crates/fm1-soc/src/lib.rs	2026-11-15 22:17:31.568366265 +0000
++++ b/crates/fm1-soc/src/lib.rs	2026-11-15 22:53:39.770081521 +0000
+@@ -231,6 +231,11 @@
+     /// FM1_GPIO_TRACE: GPIO register writes by address (debugging port use).
+     pub gpio_writes: Option<std::collections::BTreeMap<u32, u64>>,
+     unknown_log: Vec<UnknownAccess>,
++    /// The PC limit windows (corex2 0x1EEE380 PC_LIMIT0_H, 0x384 _L, 0x388 PC_LIMIT1_H, 0x38C _L): kept so that a
++    /// read gives back what was written (as on the chip) and the run loop can check fetches (FM1_PC_LIMIT)
++    pub pc_limit: [u32; 4],
++    /// every write to them: (address, value, ms)
++    pub pc_limit_log: Vec<(u32, u32, u64)>,
+     /// `--flaky-core1`: core 1's RAM loads misread now and then (flaky.rs); None = a good unit.
+     pub flaky_core1: Option<flaky::FlakyCore1>,
+     /// The power domain's analog registers.
+@@ -376,6 +381,8 @@
+             sfc_from_flash: Vec::new(),
+             gpio_writes: std::env::var("FM1_GPIO_TRACE").ok().map(|_| Default::default()),
+             unknown_log: Vec::new(),
++            pc_limit: [0; 4],
++            pc_limit_log: Vec::new(),
+             flaky_core1: None,
+             p33: Default::default(),
+             wdt_last: 0, wdt_gap: 0, wdt_gap_at: 0, wdt_seen: 0,
+@@ -903,6 +910,9 @@
+             }
+             Region::P33 => self.p33.read(addr),
+             Region::Unknown => {
++                if (0x1eee380..=0x1eee38f).contains(&addr) {
++                    return self.pc_limit[((addr - 0x1eee380) >> 2) as usize];
++                }
+                 self.log_unknown(addr, 4, false, 0);
+                 0
+             }
+@@ -1063,7 +1073,15 @@
+                 self.sfr_set(addr, value);
+                 self.sfc_reread();
+             }
+-            Region::Unknown => self.log_unknown(addr, 4, true, value),
++            Region::Unknown => {
++                if (0x1eee380..=0x1eee38f).contains(&addr) {
++                    self.pc_limit[((addr - 0x1eee380) >> 2) as usize] = value;
++                    let ms = self.periph.ms();
++                    self.pc_limit_log.push((addr & !3, value, ms));
++                    return;
++                }
++                self.log_unknown(addr, 4, true, value)
++            }
+         }
+     }
+ }

@@ -1,0 +1,14 @@
+# requires: nofactory
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# The cleaner without factory banks (CLEANER_NO_FACTORY): nothing to load at power-on but the init patch (no user
+# patch saved yet), PRESET and OCT- / OCT+ with the list up find no bank A or B (they are hidden)
+wait 1500
+patchis INIT 0 0
+spin PRESET 1
+turn PRESET 3
+wait 100
+patchis INIT 0 1
+tap OCT+
+wait 100
+patchis INIT 0 1

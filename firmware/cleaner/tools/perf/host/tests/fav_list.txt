@@ -1,0 +1,197 @@
+# requires: nofactory
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# 1.18C33: PRESET's favorites in the patch list (app.c fv_*). Over RANDOMIZE
+# (RANDOMIZE now only rolls on REC: turned past, nothing changes): favorite 1, 2, .. n, then EDIT FAVORITES (with none
+# right over RANDOMIZE). A favorite reached loads as PRESET loads a patch; OCT+ there goes to the first bank, OCT- on
+# INIT back to favorite 1. REC on a favorite asks "REMOVE FAV ?", REC again removes it (HOME takes it back). The
+# favorites are global, written to the store at once (after a move: a second later), kept over a reboot; a slot
+# emptied by the organizer drops its favorite as the list opens, a slot written over keeps it with its new name.
+# (Host tags: "C001" is the first user bank's slot 1, shown "A001"; "D001" shown "B001")
+wait 1500
+listen
+ubput C001 Alpha 10
+ubput C002 Bravo 20
+ubput C005 Charlie 30
+ubput D001 Delta 40
+fvis -
+fvdisk -1
+echo == none: EDIT FAVORITES right over RANDOMIZE; turned past RANDOMIZE nothing rolls
+turn PRESET 2
+wait 200
+patchis A001 0 1
+smark 0
+turn PRESET -2
+wait 200
+plis -1 1
+said RANDOMIZE REC ROLLS
+shashis 0 1
+turn PRESET -1
+wait 200
+plis -2 0
+fvst 0 0
+liis 0 EDIT_FAVORITES
+liis 1 RANDOMIZE
+shashis 0 1
+editedis 0
+turn PRESET -3
+wait 200
+fvst 0 0
+echo == RANDOMIZE: one REC rolls at once (no question)
+turn PRESET 1
+wait 200
+plis -1 1
+tap REC
+wait 200
+rzis 1
+shashis 0 0
+echo (UNDO: the original back)
+tap HOME
+wait 3500
+press OCT-
+wait 600
+tap HOME
+wait 300
+release OCT-
+wait 300
+shashis 0 1
+rzis 0
+echo == the editor (EDIT FAVORITES, REC): three favorites, the patch list in grey
+turn PRESET -1
+wait 100
+turn PRESET -3
+wait 200
+fvst 0 0
+tap REC
+wait 300
+fvst 0 1 0
+thmis 3 0
+engis C001 1
+tap REC
+wait 200
+said FAV ADDED
+turn PRESET 1
+wait 200
+engis C002 1
+tap REC
+wait 200
+tap OCT+
+wait 200
+engis D001 1
+tap REC
+wait 200
+fvis C001,C002,D001
+fvdisk 3 0
+tap HOME
+wait 300
+fvst 0 0
+thmis 0 0
+patchis A001 0 1
+engis C001 1
+echo == the normal list: favorite 3 .. 1 top down, numbered, starred; one detent over RANDOMIZE is favorite 1
+liis 0 EDIT_FAVORITES
+liis 1 B001_Delta 3 *
+liis 2 A002_Bravo 2 *
+liis 3 A001_Alpha 1 *
+liis 4 RANDOMIZE
+liis 5 INIT
+liis 6 A001_Alpha . *
+liis 7 A002_Bravo . *
+liis 8 A005_Charlie . -
+shot fav_list.png
+turn PRESET 1
+wait 200
+fvst 1 0
+patchis B001 0 1
+turn PRESET 2
+wait 200
+fvst 3 0
+patchis A001 0 1
+turn PRESET 1
+wait 200
+fvst -
+plis -1 1
+turn PRESET -1
+wait 200
+fvst 3 0
+patchis A001 0 1
+echo == OCT+ from the favorites: bank A; OCT- from A: INIT; from INIT: favorite 1; from the favorites: nothing
+tap OCT+
+wait 200
+fvst -
+plis 1 0 4
+patchis A001 0 1
+tap OCT+
+wait 200
+patchis B001 0 1
+tap OCT-
+wait 200
+tap OCT-
+wait 200
+patchis INIT 0 1
+shot fav_init.png
+tap OCT-
+wait 200
+fvst 3 0
+patchis A001 0 1
+tap OCT-
+wait 200
+fvst 3 0
+echo == REC on a favorite asks; HOME takes it back; REC, REC removes it (the patch stays up)
+turn PRESET -1
+wait 200
+fvst 2 0
+patchis A002 0 1
+tap REC
+wait 200
+said REMOVE FAV
+fvst 2 0 - 1
+shot fav_remove.png
+tap HOME
+wait 200
+fvst 2 0 - 0
+fvis C001,C002,D001
+tap REC
+wait 200
+tap REC
+wait 200
+said FAV REMOVED
+fvis C001,D001
+fvst -
+patchis A002 0 1
+fvdisk 2 0
+echo == kept over a reboot
+wait 3500
+reboot
+wait 1500
+fvis C001,D001
+fvdisk 2
+echo == a slot emptied (the organizer): its favorite gone as the list opens; a slot written over: kept, its new name
+pxclear C 1
+ubput D001 Zulu 99
+turn PRESET 1
+wait 300
+fvis D001
+fvdisk 1 0
+patchis A001 0 1
+liis 1 B001_Zulu 1 *
+echo == one favorite: RANDOMIZE, favorite 1, EDIT FAVORITES (the slot up emptied: PRESET down from its place)
+turn PRESET -1
+wait 200
+plis 0 0
+turn PRESET -1
+wait 200
+plis -1 1
+turn PRESET -1
+wait 200
+fvst 1 0
+patchis B001 0 1
+turn PRESET -1
+wait 200
+fvst 0 0
+turn PRESET 1
+wait 200
+fvst 1 0
+turn PRESET 1
+wait 200
+plis -1 1

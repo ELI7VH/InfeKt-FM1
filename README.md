@@ -11,7 +11,9 @@ the Virus will be available again in the future.
 **Website, installer and guide: https://j0kerpack.github.io/InfeKt-FM1/**  
 **Repository and downloads: https://github.com/j0kerpack/InfeKt-FM1**
 
-Source code will follow later.
+The firmware's source code is in [`firmware/`](firmware/) under the GNU GPL version 3 with an additional permission
+for the platform's binary libraries: see [`README-SOURCE.md`](README-SOURCE.md), [`LICENSE`](LICENSE) and
+[`LICENSE-ADDITIONAL-PERMISSION.md`](LICENSE-ADDITIONAL-PERMISSION.md).
 
 Runs on both FM-1 hardware versions, including the newer one (another flash chip, UC25HQ80; GLO > ABOUT shows
 FLASH B36014). On those newer units the optional m-bootloader is not installed (the installer refuses it).

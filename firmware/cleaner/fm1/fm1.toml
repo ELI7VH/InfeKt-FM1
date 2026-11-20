@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# InfeKt-FM1 on fm1-base (tools/build.py): the engine from the Bluetooth build (build/cleaner_ble/engine,
+# make_engine.py), this app around it
+name = "CLEANER"                # (the build's file names; the product name: app.h APP_NAME, usb_product)
+id_prefix = "FM-1_13"          # package identity: dev FM-1_1300
+usb_manufacturer = "J0kerpack"
+usb_product = "InfeKt-FM1"     # (a former name until 0.97)
+include = ["../../build/cleaner_ble/engine", "hat"]
+o2 = ["bench.c", "../../build/cleaner_ble/engine/synth.c", "../../build/cleaner_ble/engine/sy_voice.c",
+      "../../build/cleaner_ble/engine/sy_tables.c", "../../build/cleaner_ble/engine/sy_fx.c",
+      "../../build/cleaner_ble/engine/sy_waves.c", "../../build/cleaner_ble/engine/sy_dist_tab.c",
+      "../../build/cleaner_ble/engine/sy_arp_tab.c", "../../build/cleaner_ble/engine/sy_hyb_lfow.c",
+      "../../build/cleaner_ble/engine/sy_rv.c"]
+o2_cflags = ["-DSY_MAX_VOICES=16", "-DSY_CORES=2", "-DSY_HOT_RAM", "-DSY_PROF", "-DSY_CTL_RAM", "-DSY_FX_RAM", "-DSY_DELAY_FRAMES=32768", "-DHYB_POOL",
+             "-DHYB_ARP_PACK", "-DSY_FX_PIPE", "-DSY_WORK_POOL", "-DSY_UNI_CAP", "-Wno-missing-braces",
+             "-Wno-macro-redefined"]
+rom_check_skip = ["hyb_rv_run", "block"]   # -0x39999a, the reverb coefficient's lower clamp: a number, not a ROM address
+words = "words.tsv"
+ram_text_kb = 96              # the voices' control blocks and the effects in RAM too (a cold flash line: ~500 cycles);
+                              # 96 since 0.81 (REVERB HALF's loop too; the two-part builds keep 92: build_usb.sh, build_multi_ble.sh)
+ram_kb = 72                   # (RAM .data+.bss ~73 KB without the benchmark: the pool gets the rest)
+font_full = ["M", "L"]        # lower case in the LCD strip (the patch's name in the full height)
+ble = true                     # Bluetooth MIDI (--no-ble builds without it)
+no_ble_cflags = ["-DHYB_MULTI", "-DHYB_RV_BITS=32"]   # the USB build (--no-ble): two parts in the memory Bluetooth frees
+                              #; its reverb ring float (REVERB FULL as the single build's: 0.81)
+ble_central = true             # and the FM-1 connects to Bluetooth MIDI devices (a keyboard, a controller)
+cpu2 = true                    # the second core renders half the voices (a failure restarts the FM-1, the reason kept)
+usb_audio_out = false         # a computer playing through the FM-1: not wanted (the recording over the cable stays)

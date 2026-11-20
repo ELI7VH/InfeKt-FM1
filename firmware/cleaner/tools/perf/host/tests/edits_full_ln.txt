@@ -1,0 +1,140 @@
+# requires: nofactory multi
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# 1.18C33 (edits_full.txt): the launcher's own changes (a row on 1x, the next row at its line) never wait for the
+# user while a spare copy is free: SEQ A's marked pattern goes into it, back again with its edits. Both copies taken
+# and the journal full: the change not made (the row's part stays), the strip asks; HOME drops the edits, then the
+# change. The drums the same way (the spare for the line, the copy kept for the pattern left)
+wait 1500
+listen
+autosave 0
+lncyc 1
+bpm 180
+tap SEQ
+wait 200
+viewis 10
+echo == SEQ A's pattern 1 marked (the journal full)
+jrfill f+0
+tapkey w1
+wait 100
+sqis 11..1...1...1...
+jrlv a1 0 1
+echo == the launcher: rows 1 (A1, 1x), 2 (A2, 1x): row 2 on its own at the line; pattern 1 into a spare copy, no question
+lnzero
+lnset 1 1 0 0
+lnmd 1 1
+lnset 2 2 0 0
+lnmd 2 1
+tap SEQ
+wait 200
+viewis 13
+turn SELECT -20
+wait 100
+press PLAY
+release PLAY
+wait 300
+lnis 1
+wait 1400
+lnis 2
+pkis 0 2 -
+jrlv a1 0 1
+echo row 1 again: pattern 1 with its edits, from the copy
+wait 1400
+lnis 1
+pkis 0 1 -
+sqis 11..1...1...1...
+press PLAY
+release PLAY
+wait 300
+echo == the copies taken (patterns 2 and 3 marked, left), 1 marked: row 2 (now A4, REP)'s change not made, asked; HOME drops 1's edits
+tap SEQ
+wait 200
+tap SEQ
+wait 200
+viewis 10
+turn K3 1
+wait 300
+pkis 0 2 -
+jrfill f+0
+tapkey w2
+wait 100
+jrlv a2 0 1
+turn K3 1
+wait 300
+pkis 0 3 -
+jrfill f+0
+tapkey w3
+wait 100
+jrlv a3 0 1
+echo back to 2, to 1: each taken from its copy, the one left exchanged into it (no question)
+turn K3 -1
+wait 300
+pkis 0 2 -
+sqis 1.1.1...1...1...
+turn K3 -1
+wait 300
+pkis 0 1 -
+sqis 11..1...1...1...
+jrlv a1 0 1
+jrlv a2 0 1
+jrlv a3 0 1
+lnset 2 4 0 0
+lnmd 2 0
+tap SEQ
+wait 200
+viewis 13
+turn SELECT -20
+wait 100
+press PLAY
+release PLAY
+wait 300
+lnis 1
+wait 1400
+pkis a1 1 -
+tap HOME
+wait 300
+said PATTERN 1 DISCARDED
+pkis 0 - -
+wait 1400
+pkis 0 4 -
+jrlv a1 0 0
+tap SEQ
+wait 200
+viewis 11
+press PLAY
+release PLAY
+wait 300
+said Seq STOP
+lncyc 0
+lnzero
+echo == the drums' pattern 1 marked; running, pattern 2 chosen: at the line, 1 into a spare copy (kept for it), back with its edits
+tap SAVE
+wait 200
+tap REC
+wait 300
+jrn 0
+turn K3 1
+wait 300
+pkis 0 - 1
+jrfill f+0
+tapkey b1
+tapkey w3
+wait 100
+drstis 0 1 4 1
+jrlv d1 0 1
+press PLAY
+release PLAY
+wait 300
+turn K3 1
+wait 2000
+pkis 0 - 2
+drstis 0 1 4 0
+jrlv d1 0 1
+turn K3 -1
+wait 2000
+pkis 0 - 1
+drstis 0 1 4 1
+press PLAY
+release PLAY
+wait 300
+jrok

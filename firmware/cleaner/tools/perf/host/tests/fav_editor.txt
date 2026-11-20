@@ -1,0 +1,259 @@
+# requires: nofactory multi
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# 1.18C33: the favorites editor (PRESET's list, EDIT FAVORITES, REC; app.c fe_*, fv_*): the list in grey, the
+# favorites (numbered, in their order) over the bank's patches; PRESET / SELECT scroll, OCT- / OCT+ the banks, each
+# patch heard as stored on part A's engine with its own effects (part B and the drums muted, SEQ A's notes kept from
+# the engine), REC adds (as the last) or removes, a seventeenth "FAVORITES FULL", K1 moves the favorite under the
+# cursor (written a second after the last move). HOME leaves it: everything as it was (both parts' engine bytes and
+# panel buffers with their unsaved edits, the edit memory, undo, HOLD, the modes, the sequencers running), the
+# beat running: the writes wait for its stop ("SAVE PENDING")
+wait 1500
+listen
+ubput C001 P01 52
+ubput C002 P02 54
+ubput C003 P03 56
+ubput C004 P04 58
+ubput C005 P05 60
+ubput C006 P06 62
+ubput C007 P07 64
+ubput C008 P08 66
+ubput C009 P09 68
+ubput C010 P10 70
+ubput C011 P11 72
+ubput C012 P12 74
+ubput D001 P13 76
+ubput D002 P14 78
+ubput D003 P15 80
+ubput D004 P16 82
+ubput D005 P17 84
+echo == part A on A003 edited, part B (LAYER) on A002 edited, HOLD on part A
+mxmode 1
+turn PRESET 1
+wait 100
+turn PRESET 3 300
+wait 3500
+patchis A003 0 0
+pedit 40 99
+partedit 1
+turn PRESET 1
+wait 100
+tap OCT+
+wait 100
+turn PRESET 1
+wait 3500
+patchis A002 0 0
+pedit 41 77
+wait 300
+partedit 0
+tap REC
+wait 200
+holdis 1
+partedit 1
+wait 300
+echo == the editor from part B edited: the list in grey, part A's engine auditions
+turn PRESET -1
+wait 100
+spin PRESET -9
+wait 300
+fvst 0 0
+stsnap
+tap REC
+wait 300
+fvst 0 1 1
+thmis 3 1
+fvmute 1
+engis C002 1
+shot fav_ed_partb.png
+rmsreset
+key w5 down
+wait 400
+rmsis -60 0
+key w5 up
+wait 300
+holdis 1
+echo == sixteen favorites, the seventeenth full
+turn PRESET -1
+wait 200
+engis C001 1
+fvst 0 1 0
+engis C001 1
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+wait 200
+fvis C001,C002,C003,C004,C005,C006,C007,C008,C009,C010,C011,C012
+tap OCT+
+wait 200
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+turn PRESET 1 300
+tap REC
+wait 200
+fvis C001,C002,C003,C004,C005,C006,C007,C008,C009,C010,C011,C012,D001,D002,D003,D004
+fvdisk 16 0
+turn PRESET 1
+wait 200
+engis D005 1
+tap REC
+wait 200
+said FAVORITES FULL
+fvis C001,C002,C003,C004,C005,C006,C007,C008,C009,C010,C011,C012,D001,D002,D003,D004
+shot fav_ed_full.png
+echo == REC on a favorite's line (the bank's part): removed, the cursor stays on the patch
+turn PRESET -1
+wait 200
+engis D004 1
+tap REC
+wait 200
+said FAV REMOVED
+fvis C001,C002,C003,C004,C005,C006,C007,C008,C009,C010,C011,C012,D001,D002,D003
+engis D004 1
+liis 18 B004_P16 . -
+echo == up into the favorites: K1 moves the one under the cursor (the strip: "K1: MOVE"), written a second later
+tap OCT-
+wait 200
+tap OCT-
+wait 200
+fvst 0 1 14
+engis C001 1
+shot fav_ed_fav1.png
+turn K1 -2
+wait 200
+fvst 0 1 12
+fvis C002,C003,C001,C004,C005,C006,C007,C008,C009,C010,C011,C012,D001,D002,D003
+liis 12 A001_P01 3 *
+fvdisk 15 1
+shot fav_ed_move.png
+wait 1200
+fvdisk 15 0
+turn SELECT -1
+wait 200
+fvst 0 1 11
+engis C004 1
+echo == REC there removes it, the next one down heard
+tap REC
+wait 200
+fvis C002,C003,C001,C005,C006,C007,C008,C009,C010,C011,C012,D001,D002,D003
+fvst 0 1 11
+engis C001 1
+echo == HOME: the patch list again, all as it was
+tap HOME
+wait 300
+fvst 0 0
+fvmute 0
+thmis 1 1
+stsame
+holdis 1
+byteis 41 77
+partedit 0
+wait 300
+byteis 40 99
+holdis 1
+partedit 1
+wait 3500
+echo == SPLIT, part B edited: the editor, its keys (B's zone too) play part A's audition, then all as it was
+mxmode 2
+partedit 1
+wait 300
+turn PRESET -1
+wait 100
+spin PRESET -30
+wait 300
+fvst 0 0
+stsnap
+tap REC
+wait 300
+fvst 0 1
+engis C002 1
+rmsreset
+key w0 down
+wait 400
+rmsis -60 0
+key w0 up
+wait 300
+tap HOME
+wait 300
+stsame
+echo == SINGLE: the same
+wait 3500
+mxmode 0
+wait 300
+turn PRESET -1
+wait 100
+spin PRESET -30
+wait 300
+stsnap
+tap REC
+wait 300
+fvst 0 1
+fvmute 1
+tap HOME
+wait 300
+fvmute 0
+stsame
+wait 3500
+echo == the beat running: the sequencers run on (SEQ A's notes kept from the audition), a change waits for the stop
+mxmode 1
+tap PLAY
+wait 500
+qrun 0 1
+turn PRESET -1
+wait 100
+spin PRESET -30
+wait 300
+stsnap
+tap REC
+wait 300
+fvst 0 1
+fvmute 1
+qrun 0 1
+turn PRESET 1
+wait 200
+tap REC
+wait 200
+said SAVE PENDING
+fvdisk 14 1
+qrun 0 1
+tap PLAY
+wait 300
+qrun 0 0
+said Favorites SAVED
+fvdisk 15 0
+tap PLAY
+wait 300
+tap HOME
+wait 300
+qrun 0 1
+stsame
+tap PLAY
+wait 300
+echo == kept over a reboot in their order
+wait 3500
+reboot
+wait 1500
+fvdisk 15
+fvis C002,C003,C001,C005,C006,C007,C008,C009,C010,C011,C012,D001,D002,D003,C004

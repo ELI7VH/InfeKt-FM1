@@ -1,0 +1,190 @@
+# requires: nofactory
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 J0KERPACK
+# 1.18C35: PRESET's patch list scrolls fast as K1..K4 do (knob_steps: up to 3 detents a second one line a detent,
+# from there more on an S curve, 20 a second and faster ~8.5 lines a detent; a pause of 250 ms starts afresh): within
+# the section the cursor is in (a bank's patches; the favorites editor: its favorites, its bank) it stops at the
+# section's ends, and from an end, or from INIT, RANDOMIZE, a favorite, EDIT FAVORITES, a line a detent. A fast turn
+# loads nothing on its way (the first detent of a turn, slow by definition, loads as ever): the cursor alone moves, the
+# patch it rests on loaded LS_SETTLE (200 ms) after the last detent (the favorites editor: heard); one undo step a
+# browse as before. The list closed meanwhile (another view): nothing loaded. SAVE's slot list (SELECT, accelerated
+# since 1.00) stops at a bank's ends too
+wait 1500
+listen
+ubput C001 P01 41
+ubput C002 P02 42
+ubput C003 P03 43
+ubput C004 P04 44
+ubput C005 P05 45
+ubput C006 P06 46
+ubput C007 P07 47
+ubput C008 P08 48
+ubput C009 P09 49
+ubput C010 P10 50
+ubput C011 P11 51
+ubput C012 P12 52
+ubput C013 P13 53
+ubput C014 P14 54
+ubput C015 P15 55
+ubput C016 P16 56
+ubput C017 P17 57
+ubput C018 P18 58
+ubput C019 P19 59
+ubput C020 P20 60
+ubput C021 P21 61
+ubput C022 P22 62
+ubput C023 P23 63
+ubput C024 P24 64
+ubput C025 P25 65
+ubput C026 P26 66
+ubput C027 P27 67
+ubput C028 P28 68
+ubput C029 P29 69
+ubput C030 P30 70
+ubput C031 P31 71
+ubput C032 P32 72
+ubput C033 P33 73
+ubput C034 P34 74
+ubput C035 P35 75
+ubput C036 P36 76
+ubput C037 P37 77
+ubput C038 P38 78
+ubput C039 P39 79
+ubput C040 P40 80
+ubput D001 Q01 91
+ubput D002 Q02 92
+ubput D003 Q03 93
+echo == slow: a patch a detent, each loaded
+turn PRESET 1
+wait 400
+plload 0
+turn PRESET 1 300
+patchis A001 0 1
+plload 1
+turn PRESET 3 300
+patchis A004 0 1
+plis 4 0 41
+plload 3
+undois 1
+echo == fast: the cursor flies, nothing loaded on the way; the line it settles on loaded LS_SETTLE later
+turn PRESET 3 30
+plis 18 0 41
+patchis A005 0 1
+plload 1
+shot plist_fast_flying.png
+wait 300
+patchis A018 0 1
+plload 1
+undois 1
+shot plist_fast.png
+echo == the bank's top end stops a fast turn; on there a detent: nothing further (no wrap), loaded at once
+turn PRESET 40 30
+plis 40 0 41
+patchis A040 0 1
+plload 2
+wait 300
+plload 0
+echo == down fast from A010: stops at A001; from there a detent: INIT
+turn PRESET -30 300
+patchis A010 0 1
+plload 30
+turn PRESET -3 30
+wait 300
+patchis A001 0 1
+plload 2
+turn PRESET -1
+wait 300
+patchis INIT 0 1
+plload 1
+echo == from INIT fast up: a line a detent (each loaded) until the turn pauses; then fast again
+turn PRESET 3 30
+patchis A003 0 1
+plload 3
+wait 300
+turn PRESET 3 30
+plis 17 0 41
+wait 300
+patchis A017 0 1
+plload 2
+turn PRESET -14 300
+patchis A003 0 1
+plload 14
+echo == a fast turn whose list is closed before it settles (HOME's SELECT: another block): nothing more loaded
+wait 3500
+turn PRESET 1
+wait 400
+turn PRESET 3 30
+plload 1
+spin SELECT 1
+wait 300
+patchis A004 0 0
+plload 0
+spin SELECT -1
+wait 3500
+echo == the favorites editor (EDIT FAVORITES, REC): fast within the bank, heard where it settles
+turn PRESET 1
+wait 400
+spin PRESET -40
+wait 300
+fvst 0 0
+tap REC
+wait 300
+fvst 0 1 3
+plload 1
+turn PRESET 3 30
+fvst 0 1 17
+plload 1
+wait 300
+plload 1
+engis C018 1
+echo (five favorites: REC, a detent on)
+tap REC
+turn PRESET -1 300
+tap REC
+turn PRESET -1 300
+tap REC
+turn PRESET -1 300
+tap REC
+turn PRESET -1 300
+tap REC
+wait 300
+fvis C018,C017,C016,C015,C014
+echo (fast up through the bank: it stops at the bank's first line; a detent on: favorite 1, the bottom one)
+turn PRESET -1 300
+turn PRESET -3 30
+wait 300
+fvst 0 1 5
+engis C001 1
+turn PRESET -1
+wait 300
+fvst 0 1 4
+engis C018 1
+echo (fast up through the favorites: they stop at the top one)
+turn PRESET -1 300
+turn PRESET -3 30
+wait 300
+fvst 0 1 0
+engis C014 1
+echo (K1 moves a place a detent, fast or not)
+turn K1 3 30
+wait 300
+fvst 0 1 3
+fvis C018,C014,C017,C016,C015
+tap HOME
+wait 1500
+echo == SAVE's slot list: a fast SELECT stops at a bank's end (C128), on from there a slot a detent (D001, D002)
+tap SAVE
+wait 300
+svis 3
+turn SELECT 18 30
+wait 300
+svis 129
+turn SELECT 1
+wait 300
+svis 130
+turn SELECT -2 30
+svis 128
+turn SELECT -1 300
+svis 127
+tap HOME
+wait 300

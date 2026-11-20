@@ -1,0 +1,660 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only; Copyright (C) 2026 J0KERPACK -->
+<!-- ================= Sound in the browser: the engine as WebAssembly in an AudioWorklet; inserted
+     by make_page.py --synth (the page without it: make_page.py's default) ================= -->
+<style>
+  /* the player bar ("dock"): fixed at the bottom on the Editor and Patches tabs while the browser's sound is on (or
+     starting, or has something to say); its height kept in --wsdock (the editor's panels end above it). The keyboard in
+     it only on request (its button, here and in the Editor's head; "×" or Esc closes it), remembered per browser */
+  #ws-dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
+             border-top: 1px solid var(--edge-hi); background: linear-gradient(180deg, #1d1d22, #121215);
+             box-shadow: 0 -10px 30px rgba(0, 0, 0, .55); }
+  #ws-dock[hidden] { display: none; }
+  body.wsdock { padding-bottom: var(--wsdock, 0px); }
+  @media (min-width: 1100px) {
+    body.wsdock .edmain { min-height: min(880px, calc(100vh - var(--edtop, 110px) - 8px - var(--wsdock, 0px))); }
+  }
+  .wsbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; max-width: 1816px; margin: 0 auto; font-size: 12.5px; }
+  .wsbar label { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); white-space: nowrap; }
+  .wsbar select { padding: 3px 6px; font-size: 12.5px; width: auto; }
+  .wsbar input[type=range] { width: 90px; accent-color: var(--red-hi); }
+  #ws-on { min-width: 11em; }
+  #ws-meter { font-variant-numeric: tabular-nums; color: var(--dim); min-width: 12em; }
+  #ws-meter .hot { color: var(--bad); }
+  #ws-pname { color: var(--lcd-fg); font-family: ui-monospace, Menlo, Consolas, monospace; white-space: nowrap; overflow: hidden;
+              text-overflow: ellipsis; max-width: 16em; }
+  #ws-msg { flex: 1 1 4em; min-width: 0; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #ws-msg.err { color: var(--bad); }
+  .wsoct { display: inline-flex; align-items: center; gap: 4px; color: var(--dim); }
+  .wsoct button { padding: 1px 9px; font-size: 13px; }
+  .wsx { display: contents; }
+  .wspv { display: inline-flex; align-items: center; gap: 4px; color: var(--dim); white-space: nowrap; }
+  .wspv input[type=number] { width: 3.6em; padding: 3px 4px; font-size: 12.5px; }
+  #ws-more { display: none; padding: 2px 10px; }
+  @media (max-width: 600px) {           /* (a phone: the bar's settings behind "⋯") */
+    #ws-more { display: inline-block; }
+    .wsx { display: none; }
+    .wsbar.more .wsx { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; flex: 1 1 100%; }
+  }
+  #ws-close { margin-left: auto; padding: 3px 10px; white-space: nowrap; }
+  .wskbi { font-size: 15px; line-height: 1; margin-right: 5px; vertical-align: -1px; }
+  /* the Editor's head: the sound switch and the keyboard, at the end of its one row */
+  .wsed { display: inline-flex; gap: 6px; align-items: center; flex: none; }
+  .edctl .wsed button { padding: 5px 9px 5px 7px; font-size: 11.5px; }
+  /* the patch lists: a play button on each filled row */
+  #org-llist .orow, #org-dlist .orow { grid-template-columns: 20px 3.6em minmax(0, 1fr) auto 30px; }
+  .wsplay { width: 28px; height: 24px; padding: 0; border-radius: 7px; font-size: 11px; line-height: 1; justify-self: end; }
+  .wsplay.on { color: #fff; border-color: var(--red-hi); }
+  /* the file list's ▶ (step 1) as the patch manager's */
+  #b-list button.play { width: 28px; height: 24px; padding: 0; border-radius: 7px; font-size: 11px; line-height: 1; font-weight: 500;
+                        color: var(--fg); border: 1px solid #0b0b0d; background: linear-gradient(180deg, #393940, #26262b 55%, #1d1d21);
+                        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 2px 0 #050506, 0 4px 10px rgba(0, 0, 0, .35); }
+  #b-list button.play.on { color: #fff; border-color: var(--red-hi); background: linear-gradient(180deg, #393940, #26262b 55%, #1d1d21); }
+  @media (pointer: coarse) { #b-list button.play { width: 44px; height: 36px; font-size: 13px; } }
+  @media (pointer: coarse) { #org-llist .orow, #org-dlist .orow { grid-template-columns: 20px 3.2em minmax(0, 1fr) auto 44px; }
+                             .wsplay { width: 44px; height: 36px; font-size: 13px; } }
+  /* the keyboard */
+  .wskbw { display: flex; gap: 6px; align-items: stretch; max-width: 1816px; margin: 6px auto 0; }
+  .wskbw[hidden] { display: none; }
+  #ws-kbx { flex: none; width: 30px; padding: 0; font-size: 16px; line-height: 1; border-radius: 8px; }
+  .wskb { position: relative; display: flex; flex: 1 1 auto; min-width: 0; height: 92px; touch-action: none;
+          user-select: none; -webkit-user-select: none; }
+  .wskb .w { position: relative; flex: 1 1 0; margin: 0 1px; border-radius: 0 0 6px 6px; background: linear-gradient(180deg, #d9d9de, #f4f4f6 70%, #e4e4e8);
+             box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), 0 1px 0 #000; }
+  .wskb .w span { position: absolute; bottom: 6px; left: 0; right: 0; text-align: center; font-size: 10px; color: #5b5b63; pointer-events: none; }
+  .wskb .b { position: absolute; top: 0; height: 58%; z-index: 2; border-radius: 0 0 5px 5px; background: linear-gradient(180deg, #2a2a30, #0d0d10);
+             box-shadow: inset 0 -3px 0 rgba(255, 255, 255, .08), 0 2px 3px rgba(0, 0, 0, .6); }
+  .wskb .w.on { background: linear-gradient(180deg, #ff9b93, #ff5c52); }
+  .wskb .b.on { background: linear-gradient(180deg, #c3201a, #7d0c09); }
+  .wskb.off .w, .wskb.off .b { opacity: .45; }
+  @media (max-width: 600px) { .wskb { height: 76px; } .wsbar input[type=range] { width: 70px; } }
+</style>
+<div id="ws-dock" hidden>
+  <div class="wsbar" role="group" data-tl="ws_h">
+    <label><span data-t="ws_level"></span> <input type="range" id="ws-level" min="0" max="100" value="60" data-tl="ws_level"></label>
+    <span id="ws-meter" aria-live="off"></span>
+    <span class="wsx" id="ws-x">
+    <label><span data-t="ws_to"></span> <select id="ws-to"><option value="b" data-t="ws_to_b"></option><option value="d" data-t="ws_to_d"></option><option value="bd" data-t="ws_to_bd"></option></select></label>
+    <span class="wsoct"><span data-t="ws_oct"></span> <button type="button" class="plain small" id="ws-odn" data-tl="ws_odn">−</button><span id="ws-oct"></span><button type="button" class="plain small" id="ws-oup" data-tl="ws_oup">+</button></span>
+    <label><input type="checkbox" id="ws-midi"> <span data-t="ws_midi"></span></label>
+    <label><span data-t="ws_click"></span> <select id="ws-click"><option value="off" data-t="b_off"></option><option value="load" data-t="ws_click_load"></option><option value="note" data-t="b_note1"></option><option value="chord" data-t="b_chord"></option></select></label>
+    <span class="wspv" role="group" data-tl="ws_pv"><span data-t="ws_pvl"></span>
+      <select id="ws-pvmode" data-tl="b_play"><option value="off" data-t="b_off"></option><option value="note" data-t="b_note1"></option><option value="chord" data-t="b_chord"></option></select>
+      <select id="ws-pvnote" data-tl="b_notelbl"></select>
+      <input id="ws-pvlen" type="number" min="0.1" max="10" step="0.1" data-tl="b_len"> s</span>
+    </span>
+    <button type="button" class="plain small" id="ws-more" aria-expanded="false" aria-controls="ws-x" data-tl="ws_more">⋯</button>
+    <button type="button" class="plain small" id="ws-kbt" aria-expanded="false" aria-controls="ws-kbw"><span class="wskbi" aria-hidden="true">⌨</span><span data-t="ws_kb"></span></button>
+    <button type="button" class="plain small" id="ws-panic" data-t="ws_panic"></button>
+    <span id="ws-pname"></span>
+    <span id="ws-msg" role="status" aria-live="polite"></span>
+    <button type="button" class="plain small" id="ws-close" data-tl="ws_close"><span aria-hidden="true">× </span><span data-t="ws_offbtn"></span></button>
+  </div>
+  <div class="wskbw" id="ws-kbw" hidden>
+    <div class="wskb off" id="ws-kb" role="group" data-tl="ws_kbl"></div>
+    <button type="button" class="plain small" id="ws-kbx" data-tl="ws_kbclose">×</button>
+  </div>
+</div>
+<template id="ws-edtpl"><span class="wsed"><button type="button" class="ledbtn" id="ws-on" aria-pressed="false" data-t="ws_on"></button><button type="button" class="plain small" id="ws-ekb" aria-expanded="false" aria-controls="ws-kbw"><span class="wskbi" aria-hidden="true">⌨</span><span data-t="ws_kb"></span></button></span></template>
+<script id="wsdata" type="application/octet-stream">null</script>
+<script id="websynth">
+"use strict";
+// ---- Sound in the browser: the cleaner's engine (cleaner/engine, built by tools/web/wasm/build.sh) in an AudioWorklet.
+//      The module is embedded gzipped (#wsdata, base64), unpacked here (DecompressionStream) and compiled in the worklet
+//      (a Blob URL: the page stays one file, also opened from disk). The Editor's controls drive it as they drive the
+//      FM-1 (ed: WS.edit / WS.took), the Patches tab's preview and the patch manager's lists audition into it, and the
+//      dock's keyboard, the computer's keys and MIDI inputs play it. Nothing leaves the browser. ----
+Object.assign(TEXT.de, {
+  ws_h: "Klang im Browser", ws_on: "Klang im Browser", ws_level: "Pegel", ws_to: "Noten an", ws_to_b: "Browser", ws_to_d: "FM-1",
+  ws_to_bd: "Browser + FM-1", ws_oct: "Oktave", ws_odn: "Oktave tiefer (Taste Y/Z)", ws_oup: "Oktave höher (Taste X)",
+  ws_midi: "MIDI-Eingang", ws_click: "Klick in Liste", ws_click_load: "nur laden", ws_kb: "Tastatur", ws_kbl: "Tastatur (Maus, Touch; Tasten A W S E D … K)",
+  ws_panic: "Alle Noten aus", ws_voices: "{v} Stimmen · CPU {c} %", ws_off: "aus",
+  ws_starting: "Startet …", ws_ready: "Bereit: spielen mit Maus/Touch, Tasten A–K oder MIDI-Keyboard.",
+  ws_nobrowser: "Dieser Browser kann den Klang nicht abspielen (AudioWorklet, WebAssembly und DecompressionStream nötig: Chrome, Edge, Firefox, Safari ab 16.4).",
+  ws_fail: "Klang im Browser: Fehler ({e}).", ws_nodata: "Diese Seite enthält die Klangerzeugung nicht (make_page.py --synth).",
+  ws_rate: "Audio mit {r} Hz (Engine 44100 Hz, umgerechnet).", ws_nodev: "Kein FM-1 verbunden: Noten nur im Browser.",
+  ws_midiin: "MIDI-Eingang: {n}", ws_midinone: "kein MIDI-Gerät", ws_mididenied: "MIDI nicht erlaubt.",
+  ws_loaded: "Geladen: {name}", ws_edbuf: "Editor-Puffer", ws_slow: "Zu langsam: Aussetzer möglich (weniger Stimmen, REVERB aus).",
+  ws_close: "Klang im Browser aus, Leiste schließen", ws_offbtn: "Klang aus", ws_kbclose: "Tastatur schließen",
+  ws_play: "{name} im Browser spielen", ws_stop: "{name} stoppen", ws_more: "Weitere Einstellungen", ws_pv: "Anspielen mit ▶", ws_pvl: "▶",
+});
+Object.assign(TEXT.en, {
+  ws_h: "Sound in the browser", ws_on: "Sound in browser", ws_level: "Level", ws_to: "Notes to", ws_to_b: "Browser", ws_to_d: "FM-1",
+  ws_to_bd: "Browser + FM-1", ws_oct: "Octave", ws_odn: "Octave down (key Z/Y)", ws_oup: "Octave up (key X)",
+  ws_midi: "MIDI input", ws_click: "Click in list", ws_click_load: "load only", ws_kb: "Keyboard", ws_kbl: "Keyboard (mouse, touch; keys A W S E D … K)",
+  ws_panic: "All notes off", ws_voices: "{v} voices · CPU {c} %", ws_off: "off",
+  ws_starting: "Starting …", ws_ready: "Ready: play with mouse/touch, keys A–K or a MIDI keyboard.",
+  ws_nobrowser: "This browser cannot play the sound (needs AudioWorklet, WebAssembly and DecompressionStream: Chrome, Edge, Firefox, Safari 16.4+).",
+  ws_fail: "Sound in browser: error ({e}).", ws_nodata: "This page has no sound engine (make_page.py --synth).",
+  ws_rate: "Audio at {r} Hz (engine 44100 Hz, resampled).", ws_nodev: "No FM-1 connected: notes in the browser only.",
+  ws_midiin: "MIDI input: {n}", ws_midinone: "no MIDI device", ws_mididenied: "MIDI not allowed.",
+  ws_loaded: "Loaded: {name}", ws_edbuf: "editor buffer", ws_slow: "Too slow: dropouts likely (fewer voices, REVERB off).",
+  ws_close: "Sound in browser off, close the bar", ws_offbtn: "Sound off", ws_kbclose: "Close the keyboard",
+  ws_play: "Play {name} in the browser", ws_stop: "Stop {name}", ws_more: "More settings", ws_pv: "Audition with ▶", ws_pvl: "▶",
+});
+
+const WS = (() => {
+  const FS = 44100;                      // the engine's rate (the FM-1's codec)
+  const PLEN = 265;                      // the patch in the panel form: 256 bytes, the shimmer's 8, W GLIDE (ws_engine.c WS_PLEN)
+  const EXTRB = BK.EXT.RB;               // the bytes that can hold a shimmer target (app.c SHX_RB)
+  const st = Line($("ws-msg"), "");
+  const self = { on: false, ctx: null, node: null, src: "ed", name: "", voices: 0, cpu: 0, ready: false, blocks: 0 };
+  let starting = null, gainV = 0.36, midiOff = [], said = false, tabOk = false;
+  const held = new Map();                // note -> where it went ("b", "d", "bd"), for its note-off
+  const post = (m) => { if (self.node) self.node.port.postMessage(m); };
+
+  // ---- the worklet: the engine at 44100 Hz; another context rate through a cubic (Hermite) resampler ----
+  const WORKLET = `"use strict";
+class WsProc extends AudioWorkletProcessor {
+  constructor(o) {
+    super();
+    const p = o.processorOptions;
+    this.q = []; this.X = null; this.g = p.gain; this.gc = p.gain; this.ratio = p.fs / sampleRate;
+    this.pos = 1; this.EL = new Float32Array(1024); this.ER = new Float32Array(1024); this.n = 0;
+    this.busy = 0; this.done = 0; this.vo = 0; this.tick = 0;
+    this.clock = globalThis.performance && performance.now ? () => performance.now() : () => Date.now();
+    this.port.onmessage = (e) => { this.q.push(e.data); if (this.X) this.flush(); };
+    WebAssembly.instantiate(p.wasm, {}).then((r) => {
+      const X = r.instance.exports;
+      X.ws_init(p.fs);
+      this.X = X; this.B = X.ws_block();
+      this.L = new Float32Array(X.memory.buffer, X.ws_out_l(), this.B);
+      this.R = new Float32Array(X.memory.buffer, X.ws_out_r(), this.B);
+      this.P = new Uint8Array(X.memory.buffer, X.ws_patch(), X.ws_plen());
+      this.flush();
+      this.port.postMessage({ t: "ready" });
+    }).catch((e) => this.port.postMessage({ t: "err", e: String(e && e.message || e) }));
+  }
+  flush() {
+    const X = this.X;
+    for (const m of this.q.splice(0)) {
+      if (m.t === "load") { this.P.set(m.p); X.ws_load(); }
+      else if (m.t === "set") X.ws_set(m.b, m.v);
+      else if (m.t === "midi") X.ws_midi(m.d[0], m.d[1], m.d[2]);
+      else if (m.t === "off") X.ws_all_off();
+      else if (m.t === "gain") this.g = m.g;
+      else if (m.t === "uw") { new Uint8Array(X.memory.buffer, X.ws_uwave_buf(), m.r.length).set(m.r); X.ws_uwave_set(m.id); }
+    }
+  }
+  block() {                              // one engine block into the FIFO
+    const t0 = this.clock();
+    this.vo = this.X.ws_render();
+    this.busy += this.clock() - t0; this.done++;
+    if (this.n + this.B > this.EL.length) {   // (the consumed samples out, the last three kept for the interpolation)
+      const k = Math.max(0, Math.floor(this.pos) - 1);
+      this.EL.copyWithin(0, k, this.n); this.ER.copyWithin(0, k, this.n); this.n -= k; this.pos -= k;
+    }
+    this.EL.set(this.L, this.n); this.ER.set(this.R, this.n); this.n += this.B;
+  }
+  process(inputs, outputs) {
+    const out = outputs[0], l = out[0], r = out[1] || out[0], N = l.length;
+    if (!this.X) return true;
+    let g = this.gc;
+    const dg = (this.g - g) / N;
+    if (this.ratio === 1 && N === this.B && this.n === 0) {   // (the context at the engine's rate: a block a quantum)
+      const t0 = this.clock();
+      this.vo = this.X.ws_render();
+      this.busy += this.clock() - t0; this.done++;
+      for (let i = 0; i < N; i++) { g += dg; l[i] = this.L[i] * g; r[i] = this.R[i] * g; }
+    } else {
+      for (let i = 0; i < N; i++) {
+        while (this.pos + 2 >= this.n) this.block();
+        const k = Math.floor(this.pos), f = this.pos - k;
+        const h = (a, b, c, d) => b + 0.5 * f * (c - a + f * (2 * a - 5 * b + 4 * c - d + f * (3 * (b - c) + d - a)));
+        const E = this.EL, F = this.ER, k0 = k > 0 ? k - 1 : 0;
+        g += dg;
+        l[i] = h(E[k0], E[k], E[k + 1], E[k + 2]) * g;
+        r[i] = h(F[k0], F[k], F[k + 1], F[k + 2]) * g;
+        this.pos += this.ratio;
+      }
+    }
+    if (out[1] && r === l) out[1].set(l);
+    this.gc = this.g;
+    if (++this.tick >= 64) {             // (about 6 a second: the voices, the engine's share of the audio's time, the peak)
+      this.port.postMessage({ t: "st", v: this.vo, cpu: this.busy / (this.done * this.B / ${FS} * 1000) });
+      this.tick = 0; this.busy = 0; this.done = 0;
+    }
+    return true;
+  }
+}
+registerProcessor("ws-proc", WsProc);
+`;
+  async function wasmBytes() {
+    const el = $("wsdata"), b64 = el ? el.textContent.trim() : "null";
+    if (b64 === "null" || !b64) throw Object.assign(new Error("no engine"), { key: "ws_nodata" });
+    const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const ds = new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return new Response(ds).arrayBuffer();
+  }
+  const supported = () => typeof AudioWorkletNode === "function" && typeof WebAssembly === "object" && typeof DecompressionStream === "function";
+
+  async function start() {
+    if (self.on || starting) return starting || Promise.resolve(true);
+    if (!supported()) { st.say("ws_nobrowser", null, true); said = true; paint(); return Promise.resolve(false); }
+    starting = (async () => {
+      st.say("ws_starting");
+      let ctx;
+      try { ctx = new AudioContext({ sampleRate: FS, latencyHint: "interactive" }); }
+      catch (_) { ctx = new AudioContext({ latencyHint: "interactive" }); }   // (a browser without the rate choice)
+      try {
+        const wasm = await wasmBytes();
+        try {                            // (a Blob URL; a page opened from disk has an opaque origin, where Chromium
+          const url = URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }));   // refuses it: a data URL)
+          try { await ctx.audioWorklet.addModule(url); } finally { URL.revokeObjectURL(url); }
+        } catch (_) {
+          await ctx.audioWorklet.addModule("data:text/javascript;base64," + btoa(unescape(encodeURIComponent(WORKLET))));
+        }
+        const node = new AudioWorkletNode(ctx, "ws-proc", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+                                                             processorOptions: { wasm, fs: FS, gain: gainV } });
+        await new Promise((res, rej) => {
+          node.port.onmessage = (e) => {
+            const m = e.data;
+            if (m.t === "ready") { self.ready = true; res(); }
+            else if (m.t === "err") rej(new Error(m.e));
+            else if (m.t === "st") { self.voices = m.v; self.cpu = m.cpu; self.blocks++; meter(); }
+          };
+          setTimeout(() => rej(new Error("timeout")), 10000);
+        });
+        node.connect(ctx.destination);
+        if (ctx.state !== "running") await ctx.resume();
+        self.ctx = ctx; self.node = node; self.on = true;
+        if (typeof SETE !== "undefined" && SETE) for (const w of SETE.waves) post({ t: "uw", id: w.slot, r: Uint8Array.from(w.rec) });   // (the
+        self.src = "ed"; loadEd();                                     // page's own waves, as on a device with them)
+        st.say(ctx.sampleRate === FS ? "ws_ready" : "ws_rate", { r: ctx.sampleRate });
+        store.set("infekt.ws", "1");
+      } catch (e) {
+        try { ctx.close(); } catch (_) { /* closed */ }
+        if (e && e.key) st.say(e.key, null, true); else st.say("ws_fail", { e: (e && e.message) || e }, true);
+        said = true;
+      }
+      starting = null;
+      paint();
+      ed.refresh();
+      return self.on;
+    })();
+    paint();
+    return starting;
+  }
+  function stop() {
+    allOff();
+    if (self.ctx) try { self.ctx.close(); } catch (_) { /* closed */ }
+    self.ctx = self.node = null; self.on = self.ready = false;
+    store.set("infekt.ws", "0");
+    st.say(null); said = false;
+    paint();
+    ed.refresh();
+  }
+
+  // ---- the patch: the editor's buffer (its panel form) or a patch from a bank (data 256 + the extension x, 21) ----
+  function panelOf(data, x) {            // a bank patch in the panel form (as the FM-1's panel holds it: app.c shx_sync)
+    const p = new Uint8Array(PLEN);
+    p.set(data.subarray(0, 256));
+    const X = BK.EXT.DEF.map((v, k) => (x && k < x.length ? x[k] | 0 : v));   // (a shorter x: the defaults)
+    for (let k = 0; k < 8; k++) p[256 + k] = X[k];
+    for (let k = 0; k < EXTRB.length; k++) { const t = X[8 + k]; if (t >= 1 && t <= 2) p[EXTRB[k]] = 199 + t; }
+    p[264] = Math.min(X[BK.EXT.GX], 15);   // (1.18C47: W GLIDE past the values, app.c SHX_GL)
+    return p;
+  }
+  function load(p, name) {
+    held.forEach((to, n) => { if (to.includes("d")) devSend(0x80, n, 0); });
+    held.clear(); paintKeys();
+    post({ t: "load", p: Uint8Array.from(p.subarray(0, PLEN)) });
+    self.name = name || String.fromCharCode(...p.slice(240, 250)).replace(/[^\x20-\x7e]/g, " ").trim();
+    paint();
+  }
+  function loadEd() { if (ed.buf) load(ed.buf, ""); self.src = "ed"; }
+  self.edit = (b, v) => {                // (ed.set) an edit of the editor's buffer
+    if (!self.on) return;
+    if (self.src !== "ed") { loadEd(); return; }   // (an audition was playing: the editor's patch again, with the edit)
+    post({ t: "set", b, v });
+    if (b >= 240 && b < 250) { self.name = String.fromCharCode(...ed.buf.slice(240, 250)).replace(/[^\x20-\x7e]/g, " ").trim(); paint(); }
+  };
+  self.took = (ch) => {                  // (ed.take) bytes from the FM-1: a patch change (many) or a knob turned there
+    if (!self.on || self.src !== "ed") return;
+    if (ch.length > 8) loadEd();
+    else for (const b of ch) post({ t: "set", b, v: ed.buf[b] });
+  };
+  // an audition: a bank patch into the engine (and into the editor while no FM-1 is connected to it: then edited on);
+  // notes: the preview's ("off" | "note" | "chord"), root, length (s). Returns true when the FM-1 needs nothing more.
+  self.audition = (it, mode, root, len) => {
+    if (!self.on || !it || !it.data) return false;
+    playing = null; marks(); endAud();
+    const p = panelOf(it.data, it.x);
+    if (!ed.live && ed.loadPatch) { ed.loadPatch(p); self.src = "ed"; load(ed.buf, it.name); }
+    else { load(p, it.name); self.src = "aud"; }
+    st.say("ws_loaded", { name: it.name || "—" });
+    phrase(BK.previewNotes(mode, root), len);
+    return self.to === "b";
+  };
+  let phT = 0, phN = [], endCb = null;
+  function endAud() { const f = endCb; endCb = null; if (f) f(); }   // (who asked for the audition: its notes are over)
+  function phrase(notes, len) {
+    clearTimeout(phT);
+    for (const n of phN) post({ t: "midi", d: [0x80, n, 0] });
+    phN = notes;
+    if (!notes.length) { setTimeout(endAud, 0); return; }
+    for (const n of notes) post({ t: "midi", d: [0x90, n, 100] });
+    phT = setTimeout(() => { for (const n of phN) post({ t: "midi", d: [0x80, n, 0] }); phN = []; playing = null; marks(); endAud(); },
+                     Math.max(0.1, len || 1) * 1000);
+  }
+  // an audition asked by a click (the Patches tab's ▶): the sound switched on first (the click is the user's gesture),
+  // then as audition; onEnd once its notes are over (or stopped, or another took over). False: no sound here.
+  self.play = async (it, mode, root, len, onEnd) => {
+    if (!self.on && !(await start())) return false;
+    if (!self.audition(it, mode, root, len)) return false;
+    endCb = onEnd || null;
+    if (!phN.length) setTimeout(endAud, 0);
+    return true;
+  };
+  self.stopAudition = () => {
+    clearTimeout(phT);
+    for (const n of phN) post({ t: "midi", d: [0x80, n, 0] });
+    phN = []; playing = null; marks(); endAud();
+  };
+
+  // ---- notes: to the browser, the FM-1 or both (the dock's choice) ----
+  self.to = "b";
+  const devPair = () => (typeof livePair === "function" ? livePair() : null);
+  function devSend(s, n, v) { const p = devPair(); if (!p) return false; try { p.output.send([s, n & 127, v & 127]); return true; } catch (_) { return false; } }
+  function noteOn(n, v) {
+    if (n < 0 || n > 127) return;
+    if (held.has(n)) noteOff(n);
+    const to = self.to === "d" && !devPair() ? "b" : self.to;
+    if (to.includes("b")) {
+      if (self.on) post({ t: "midi", d: [0x90, n, v] });
+      else start().then(() => { if (held.has(n) && held.get(n).includes("b")) post({ t: "midi", d: [0x90, n, v] }); });   // (the first
+    }                                    // touch switches the sound on: its note once it runs)
+    if (to.includes("d")) devSend(0x90, n, v);
+    held.set(n, to);
+    paintKeys();
+  }
+  function noteOff(n) {
+    const to = held.get(n);
+    if (to === undefined) return;
+    held.delete(n);
+    if (to.includes("b")) post({ t: "midi", d: [0x80, n, 0] });
+    if (to.includes("d")) devSend(0x80, n, 0);
+    paintKeys();
+  }
+  function allOff() {
+    for (const n of [...held.keys()]) noteOff(n);
+    clearTimeout(phT); phN = []; playing = null; marks(); endAud();
+    post({ t: "off" });
+    post({ t: "midi", d: [0xB0, 64, 0] });
+    paintKeys();
+  }
+  self.supported = supported;
+  self.noteOn = noteOn; self.noteOff = noteOff; self.allOff = allOff; self.start = start; self.stop = stop;
+  self.midi = (s, a, b) => post({ t: "midi", d: [s, a, b] });
+
+  // ---- the dock ----
+  const dock = $("ws-dock"), kb = $("ws-kb");
+  let oct = 4, octN = 3;                 // (the lowest C: C oct in the FM-1's names, C4 = 60; the octaves shown)
+  const keyEls = new Map();
+  function buildKeys() {
+    const w = window.innerWidth;
+    octN = w < 560 ? 1 : w < 900 ? 2 : w < 1300 ? 3 : 4;
+    kb.textContent = "";
+    keyEls.clear();
+    const lo = 12 * (oct + 1), hi = lo + 12 * octN, whites = [];
+    for (let n = lo; n <= hi; n++) if (![1, 3, 6, 8, 10].includes(n % 12)) whites.push(n);
+    const ww = 100 / whites.length;
+    whites.forEach((n) => {
+      const k = document.createElement("div");
+      k.className = "w"; k.dataset.n = n;
+      if (n % 12 === 0) { const s = document.createElement("span"); s.textContent = BK.noteName(n); k.append(s); }
+      kb.append(k); keyEls.set(n, k);
+    });
+    for (let n = lo; n < hi; n++) if ([1, 3, 6, 8, 10].includes(n % 12)) {
+      const i = whites.indexOf(n - 1), k = document.createElement("div");
+      k.className = "b"; k.dataset.n = n;
+      k.style.left = `calc(${(i + 1) * ww}% - ${ww * 0.3}%)`; k.style.width = `${ww * 0.6}%`;
+      kb.append(k); keyEls.set(n, k);
+    }
+    $("ws-oct").textContent = "C" + oct;
+    paintKeys();
+  }
+  function paintKeys() { keyEls.forEach((el, n) => el.classList.toggle("on", held.has(n))); kb.classList.toggle("off", !self.on && self.to !== "d"); }
+  // the pointers: each its own note, a slide to the next key (velocity: lower on the key, louder)
+  const ptr = new Map();
+  function keyAt(x, y) { const el = document.elementFromPoint(x, y); return el && el.closest && el.closest("#ws-kb > div"); }
+  function velOf(el, y) { const r = el.getBoundingClientRect(); return Math.max(20, Math.min(127, Math.round(30 + 97 * (y - r.top) / r.height))); }
+  kb.addEventListener("pointerdown", (e) => {
+    const el = keyAt(e.clientX, e.clientY);
+    if (!el) return;
+    e.preventDefault();
+    try { kb.setPointerCapture(e.pointerId); } catch (_) { /* (synthetic) */ }
+    const n = +el.dataset.n;
+    ptr.set(e.pointerId, n);
+    noteOn(n, velOf(el, e.clientY));
+  });
+  kb.addEventListener("pointermove", (e) => {
+    if (!ptr.has(e.pointerId)) return;
+    const el = keyAt(e.clientX, e.clientY), n = el ? +el.dataset.n : -1, was = ptr.get(e.pointerId);
+    if (n === was) return;
+    if (was >= 0) noteOff(was);
+    ptr.set(e.pointerId, n);
+    if (n >= 0) noteOn(n, velOf(el, e.clientY));
+  });
+  const up = (e) => { if (!ptr.has(e.pointerId)) return; const n = ptr.get(e.pointerId); ptr.delete(e.pointerId); if (n >= 0) noteOff(n); };
+  kb.addEventListener("pointerup", up);
+  kb.addEventListener("pointercancel", up);
+  kb.addEventListener("contextmenu", (e) => e.preventDefault());
+  // the computer's keys (their places, not their letters: QWERTZ and QWERTY alike): A W S E D F T G Y/Z H U J K O L P
+  const KEYS = { KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 6, KeyG: 7, KeyY: 8, KeyH: 9, KeyU: 10, KeyJ: 11,
+                 KeyK: 12, KeyO: 13, KeyL: 14, KeyP: 15, Semicolon: 16, Quote: 17 };
+  const down = new Map();
+  const typing = (tg) => tg && (tg.isContentEditable || tg.tagName === "TEXTAREA" || tg.tagName === "SELECT" ||
+                                (tg.tagName === "INPUT" && !["checkbox", "radio", "range", "button"].includes(tg.type)));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && kbOpen && !dock.hidden && !document.querySelector("dialog[open]")) { showKb(false); return; }
+    if (!tabOk || (!self.on && self.to !== "d") || e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || document.querySelector("dialog[open]")) return;
+    if (e.code === "KeyZ" || e.code === "KeyX") { if (!e.repeat) octave(e.code === "KeyZ" ? -1 : 1); e.preventDefault(); return; }
+    if (!(e.code in KEYS)) return;
+    e.preventDefault();
+    if (e.repeat || down.has(e.code)) return;
+    const n = 12 * (oct + 1) + KEYS[e.code];
+    down.set(e.code, n);
+    noteOn(n, 100);
+  });
+  document.addEventListener("keyup", (e) => { if (down.has(e.code)) { noteOff(down.get(e.code)); down.delete(e.code); } });
+  window.addEventListener("blur", () => { for (const n of down.values()) noteOff(n); down.clear(); });
+  function octave(d) { oct = Math.max(0, Math.min(7, oct + d)); store.set("infekt.wsoct", String(oct)); buildKeys(); }
+  $("ws-odn").onclick = () => octave(-1);
+  $("ws-oup").onclick = () => octave(1);
+
+  // ---- MIDI inputs (every input but the FM-1's own: its keys play the FM-1) ----
+  async function midiIn(on) {
+    for (const f of midiOff.splice(0)) f();
+    if (!on) { paint(); return; }
+    let acc = DEV.access;
+    try { if (!acc) acc = await navigator.requestMIDIAccess(); }
+    catch (_) { st.say("ws_mididenied", null, true); $("ws-midi").checked = false; return; }
+    const hook = () => {
+      for (const f of midiOff.splice(0)) f();
+      const own = devPair(), names = [];
+      for (const inp of acc.inputs.values()) {
+        if (own && inp === own.input) continue;
+        if (typeof listen === "function") midiOff.push(listen(inp, onMidi));
+        names.push(inp.name);
+      }
+      st.say("ws_midiin", { n: names.length ? names.join(", ") : t("ws_midinone") });
+    };
+    hook();
+    acc.addEventListener("statechange", (e) => { if (e.port.type === "input" && $("ws-midi").checked) hook(); });
+  }
+  function onMidi(e) {
+    const d = e.data;
+    if (!d || d.length < 2 || d[0] >= 0xF0) return;   // (no SysEx, no real time)
+    const ty = d[0] & 0xF0;
+    if (ty === 0x90 && d[2]) noteOn(d[1], d[2]);
+    else if (ty === 0x80 || ty === 0x90) noteOff(d[1]);
+    else if (self.on && (ty === 0xB0 || ty === 0xE0 || ty === 0xD0 || ty === 0xA0)) post({ t: "midi", d: [ty, d[1] | 0, d[2] | 0] });
+  }
+
+  // ---- the controls ----
+  function meter() {
+    const m = $("ws-meter");
+    if (!self.on) { m.textContent = ""; return; }
+    const c = Math.round(self.cpu * 100);
+    m.textContent = t("ws_voices", { v: self.voices, c });
+    m.classList.toggle("hot", c > 80);
+  }
+  function paint() {
+    const b = $("ws-on");
+    b.setAttribute("aria-pressed", self.on ? "true" : "false");
+    b.disabled = !!starting;
+    const dev = !!devPair();
+    for (const o of $("ws-to").options) if (o.value !== "b") o.disabled = !dev;
+    if (!dev && self.to !== "b") { self.to = "b"; }
+    $("ws-to").value = self.to;
+    $("ws-pname").textContent = self.on ? self.name || t("ws_edbuf") : "";
+    meter(); paintKeys(); showDock();
+  }
+  // the Editor's head: the sound switch and the keyboard's button (the obvious way in while the bar is not shown), at
+  // the end of its controls' row
+  document.querySelector("#panel-editor .edctl").append($("ws-edtpl").content.cloneNode(true));
+  $("ws-on").onclick = () => (self.on ? stop() : start());
+  $("ws-close").onclick = () => { if (self.on) stop(); else { st.say(null); said = false; paint(); } };
+  $("ws-level").oninput = () => { const v = +$("ws-level").value / 100; gainV = v * v; post({ t: "gain", g: gainV }); store.set("infekt.wslev", $("ws-level").value); };
+  $("ws-to").onchange = () => { allOff(); self.to = $("ws-to").value; paint(); };
+  $("ws-midi").onchange = () => { store.set("infekt.wsmidi", $("ws-midi").checked ? "1" : "0"); midiIn($("ws-midi").checked); };
+  $("ws-click").onchange = () => store.set("infekt.wsclick", $("ws-click").value);
+  $("ws-panic").onclick = allOff;
+  // the ▶'s notes (the Patches tab's Play / Note / Length), here too: the patch manager hides those
+  {
+    const pairs = [["ws-pvmode", "b-pvmode"], ["ws-pvnote", "b-pvnote"], ["ws-pvlen", "b-pvlen"]];
+    const nt = $("ws-pvnote");
+    for (let n = 24; n <= 96; n++) nt.add(new Option(BK.noteName(n), n));
+    const pull = () => { for (const [a, b] of pairs) $(a).value = $(b).value; };
+    for (const [a, b] of pairs) {
+      $(a).addEventListener("change", () => { $(b).value = $(a).value; $(b).dispatchEvent(new Event("change")); });
+      $(b).addEventListener("change", pull);
+    }
+    pull();
+    relang.push(pull);
+  }
+  // the keyboard: only on request (its button in the bar and in the Editor's head, "×", Esc), remembered per browser;
+  // the computer's keys and MIDI play with it closed as well
+  let kbOpen = false;
+  function showKb(on, save = true) {
+    kbOpen = on;
+    $("ws-kbw").hidden = !on;
+    for (const id of ["ws-kbt", "ws-ekb"]) $(id).setAttribute("aria-expanded", on ? "true" : "false");
+    if (save) store.set("infekt.wskb", on ? "1" : "0");
+    sizeDock();
+  }
+  $("ws-kbt").onclick = () => showKb(!kbOpen);
+  $("ws-ekb").onclick = () => {          // (from the Editor: opening it switches the sound on, a user's gesture)
+    if (kbOpen && self.on) { showKb(false); return; }
+    showKb(true);
+    if (!self.on) start();
+  };
+  $("ws-kbx").onclick = () => showKb(false);
+  $("ws-more").onclick = () => {
+    const on = $("ws-more").getAttribute("aria-expanded") !== "true";
+    $("ws-more").setAttribute("aria-expanded", on ? "true" : "false");
+    dock.querySelector(".wsbar").classList.toggle("more", on);
+    sizeDock();
+  };
+  // the bar: shown on the Editor and Patches tabs while the sound is on (or starting, or saying why it is not);
+  // its "×" switches the sound off and so closes it
+  function showDock() {
+    const want = tabOk && (self.on || !!starting || said);
+    if (dock.hidden === !want) return;
+    dock.hidden = !want;
+    if (!want) { for (const n of down.values()) noteOff(n); down.clear(); }
+    sizeDock();
+  }
+  function sizeDock() {
+    document.documentElement.style.setProperty("--wsdock", (dock.hidden ? 0 : dock.offsetHeight) + "px");
+    document.body.classList.toggle("wsdock", !dock.hidden);
+  }
+  self.tab = (name) => {                 // (showTab) the bar on the Editor and Patches tabs
+    tabOk = name === "editor" || name === "patches";
+    showDock();
+  };
+  if (typeof ResizeObserver === "function") new ResizeObserver(sizeDock).observe(dock);
+  let rw = 0;
+  window.addEventListener("resize", () => { clearTimeout(rw); rw = setTimeout(() => { buildKeys(); sizeDock(); }, 150); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { for (const n of down.values()) noteOff(n); down.clear(); } });
+
+  // the patch manager's lists: a click auditions the patch (the dock's "Click in list")
+  function orgItem(sd, i) {
+    if (sd === "L") { const b = org.LB.banks[org.LB.cur]; return b ? b.slots[i] : null; }
+    const B = org.DB.banks[org.DB.cur];
+    return B.pending.has(i) ? B.pending.get(i) : B.slots[i];
+  }
+  for (const sd of ["L", "D"]) $(sd === "L" ? "org-llist" : "org-dlist").addEventListener("click", (e) => {
+    const r = e.target.closest(".orow"), how = $("ws-click").value;
+    if (!r || !self.on || how === "off" || e.shiftKey || e.ctrlKey || e.metaKey || e.target.tagName === "INPUT") return;
+    const it = orgItem(sd, +r.dataset.i);
+    if (it && it.data) self.audition(it, how === "load" ? "off" : how, 48, 1.5);
+  });
+  // and a ▶ on each filled row whose patch the page holds (a device row only once its bank was read): the patch into
+  // the browser, its notes as the preview's settings (Play, Note, Length; "off" plays a note); the sound switched on
+  // first (a click is the user's gesture), the bar shown; ■ (the same button again) stops. The click stays the
+  // button's (no row choice, no "Click in list" audition as well).
+  let playing = null;                    // { sd, i, bank } whose notes play
+  const bankOf = (sd) => (sd === "L" ? org.LB.cur : org.DB.cur);
+  const isPlaying = (sd, i) => !!playing && playing.sd === sd && playing.i === i && playing.bank === bankOf(sd);
+  function decorate(sd) {
+    for (const r of $(sd === "L" ? "org-llist" : "org-dlist").querySelectorAll(".orow")) {
+      const i = +r.dataset.i, it = r.classList.contains("empty") || r.classList.contains("del") ? null : orgItem(sd, i);
+      let b = r.querySelector(".wsplay");
+      if (!it || !it.data) { if (b) b.remove(); continue; }
+      if (!b) {
+        b = document.createElement("button");
+        b.type = "button"; b.className = "plain small wsplay";
+        r.append(b);
+      }
+      const on = isPlaying(sd, i), nm = it.name || t("b_noname");
+      b.textContent = on ? "■" : "▶";
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      b.setAttribute("aria-label", t(on ? "ws_stop" : "ws_play", { name: nm }));
+    }
+  }
+  function marks() { decorate("L"); decorate("D"); }
+  for (const sd of ["L", "D"]) {
+    const box = $(sd === "L" ? "org-llist" : "org-dlist");
+    if (typeof MutationObserver === "function") new MutationObserver(() => decorate(sd)).observe(box, { childList: true });
+    const swallow = (e) => { if (e.target.closest && e.target.closest(".wsplay")) e.stopPropagation(); };
+    box.addEventListener("dblclick", swallow, true);
+    box.addEventListener("keydown", swallow, true);   // (Enter / Space on the button: its own, not the list's)
+    box.addEventListener("click", async (e) => {
+      const b = e.target.closest && e.target.closest(".wsplay");
+      if (!b) return;
+      e.stopPropagation(); e.preventDefault();
+      const i = +b.closest(".orow").dataset.i;
+      if (isPlaying(sd, i)) { allOff(); return; }
+      const it = orgItem(sd, i);
+      if (!it || !it.data) return;
+      if (!self.on && !(await start())) return;
+      const mode = $("b-pvmode").value, len = parseFloat($("b-pvlen").value);
+      self.audition(it, mode === "off" ? "note" : mode, +$("b-pvnote").value || 48, isFinite(len) && len > 0 ? Math.min(10, len) : 1.5);
+      playing = { sd, i, bank: bankOf(sd) };
+      marks();
+    }, true);
+  }
+
+  // ---- start ----
+  oct = Math.max(0, Math.min(7, parseInt(store.get("infekt.wsoct") || "3", 10) || 3));
+  if (store.get("infekt.wslev")) $("ws-level").value = store.get("infekt.wslev");
+  gainV = (+$("ws-level").value / 100) ** 2;
+  $("ws-click").value = store.get("infekt.wsclick") || "chord";
+  showKb(store.get("infekt.wskb") === "1", false);
+  const wsEls = [dock, $("panel-editor").querySelector(".wsed")];
+  for (const el of wsEls.flatMap((h) => [...h.querySelectorAll("[data-t]")])) el.textContent = t(el.dataset.t);
+  for (const el of wsEls.flatMap((h) => [...h.querySelectorAll("[data-tl]")])) el.setAttribute("aria-label", t(el.dataset.tl));
+  buildKeys();
+  relang.push(() => { paint(); buildKeys(); marks(); });
+  devHooks.push(paint);
+  const pr = ed.onRefresh;
+  ed.onRefresh = () => { if (pr) pr(); paint(); };
+  if (store.get("infekt.wsmidi") === "1" && DEV.access) { $("ws-midi").checked = true; midiIn(true); }
+  self.tab(tab);
+  paint();
+  window.infekt.WS = self;
+  return self;
+})();
+</script>
