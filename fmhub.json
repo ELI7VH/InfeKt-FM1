@@ -1,5 +1,5 @@
 {
-  "what": "A virtual analog synthesizer: three oscillators per voice, two multimode filters, three LFOs, a modulation matrix, up to 16 voices and two parts as layer or split. With effects and a shimmer reverb, an arpeggiator, a sequencer played from the keys and a drum machine.",
+  "what": "A virtual analog synthesizer: three oscillators per voice, two multimode filters, three LFOs, a modulation matrix, up to 16 voices and two parts. With effects, an arpeggiator, a sequencer and a drum machine. The factory sounds and wavetables are installed by its own installer page.",
   "author": "J0KERPACK",
   "kinds": [
     "synth"
