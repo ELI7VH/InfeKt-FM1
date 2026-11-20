@@ -3,7 +3,7 @@
 # InfeKt-FM1 on fm1-base (tools/build.py): the engine from the Bluetooth build (build/cleaner_ble/engine,
 # make_engine.py), this app around it
 name = "CLEANER"                # (the build's file names; the product name: app.h APP_NAME, usb_product)
-id_prefix = "FM-1_13"          # package identity: dev FM-1_1300
+id_prefix = "FM-1_49"          # package identity: dev FM-1_4900 (1.19.4 and before: FM-1_13, the page's FORMER_IDS)
 usb_manufacturer = "J0kerpack"
 usb_product = "InfeKt-FM1"     # (a former name until 0.97)
 include = ["../../build/cleaner_ble/engine", "hat"]
@@ -12,7 +12,9 @@ o2 = ["bench.c", "../../build/cleaner_ble/engine/synth.c", "../../build/cleaner_
       "../../build/cleaner_ble/engine/sy_waves.c", "../../build/cleaner_ble/engine/sy_dist_tab.c",
       "../../build/cleaner_ble/engine/sy_arp_tab.c", "../../build/cleaner_ble/engine/sy_hyb_lfow.c",
       "../../build/cleaner_ble/engine/sy_rv.c"]
-o2_cflags = ["-DSY_MAX_VOICES=16", "-DSY_CORES=2", "-DSY_HOT_RAM", "-DSY_PROF", "-DSY_CTL_RAM", "-DSY_FX_RAM", "-DSY_DELAY_FRAMES=32768", "-DHYB_POOL",
+# (1.19.2) -DSY_I24_ONLY -DSY_NO_SOFTCLIP: the firmware renders through sy_render_i24 / sy_multi_render_i24 alone and
+# never sets SY_OPT_SOFTCLIP, so sy_render's own clip loop and the soft limiter's branches are out (synth.c; -288 B)
+o2_cflags = ["-DSY_I24_ONLY", "-DSY_NO_SOFTCLIP", "-DSY_MAX_VOICES=16", "-DSY_CORES=2", "-DSY_HOT_RAM", "-DSY_PROF", "-DSY_CTL_RAM", "-DSY_FX_RAM", "-DSY_DELAY_FRAMES=32768", "-DHYB_POOL",
              "-DHYB_ARP_PACK", "-DSY_FX_PIPE", "-DSY_WORK_POOL", "-DSY_UNI_CAP", "-Wno-missing-braces",
              "-Wno-macro-redefined"]
 rom_check_skip = ["hyb_rv_run", "block"]   # -0x39999a, the reverb coefficient's lower clamp: a number, not a ROM address

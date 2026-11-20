@@ -219,7 +219,7 @@ typedef struct sy_synth {
     uint8_t held[128];                  /* keys held (mono modes: the order) */
     uint8_t stack[16];                  /* mono: held keys, last on top */
     uint8_t nstack;
-    uint8_t sustain_hold;
+    uint8_t sustain_hold;               /* (1.19.2) the sustain pedal (CC 64) down: synth.c sustain */
     float last_note;                    /* portamento start */
     sy_lfo_t glfo[3];                   /* LFOs in mono mode */
     float clock_ph;                     /* arpeggiator */
@@ -370,6 +370,8 @@ typedef struct sy_synth {
      * other voices share; each a triangle's phase (0..1), rate and target rate (Hz), the seconds to the next target */
     sy_dw_t dw[2];
     float dw_w[2];                      /* (their values this block, of the nominal amount) */
+    uint8_t ped_k[16];                  /* (1.19.2, at the end too) the arpeggiator's keys let go under the sustain
+                                         * pedal (a bit each; synth.c sustain) */
 } sy_synth;
 
 void sy_init(sy_synth *s, float fs);

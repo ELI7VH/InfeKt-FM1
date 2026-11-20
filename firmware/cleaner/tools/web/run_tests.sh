@@ -9,7 +9,7 @@
 #   that do not answer (test_ports.mjs), the patch manager in Chromium (test_organizer.mjs), the patch export with a simulated dump (test_export.mjs),
 #   the Installation tab's "?" tooltips and its layout in Chromium (test_install_view.mjs), the factory banks'
 #   option and their write after an install, the wait display over it (test_factory.mjs: made-up banks) (FIRMWARE: a release package
-#   FM-1_13009500, embedded by make_page.py; jsdom from the working directory's node_modules: run it where
+#   FM-1_49xxxxxx or a former FM-1_13xxxxxx, embedded by make_page.py; jsdom from the working directory's node_modules: run it where
 #   `npm install jsdom` was done)
 # Both variants of the page (make_page.py: without and with --synth, the sound in the browser): the page tests run on
 # each; then the web synth itself: test_websynth.mjs in Chromium, and wasm/fidelity.mjs (its module against the host lab

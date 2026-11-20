@@ -5,10 +5,14 @@
 #include <stdint.h>
 #include "plat.h"
 
-#define HYB_VERSION "1.19"              /* the firmware's version, shown in GLO > ABOUT: the one place to change it (the
+#define HYB_VERSION "1.19.5"            /* the firmware's version, shown in GLO > ABOUT: the one place to change it (the
                                           * release package script reads it from here for build_multi_ble.sh --release,
                                           * the page's --version and the file names). 1.19: the first public
                                           * release, 1.18C49's firmware with the version and ABOUT's strings changed.
+                                          * 1.19.1: GLO's order, B CHANNEL under MIDI.
+                                          * 1.19.3: SEQ B in SINGLE (MIDI only), DRUM OUT.
+                                          * 1.19.4: A / B CHANNEL's IN and OUT, CLK OFFSET.
+                                          * 1.19.5: CLK LOCK, phase lock to an external clock.
                                           * Before it the cleaner's test builds "1.18Cnn" ("C": the cleaner build of 1.18;
                                           * C3: the own reverb and shimmer; a build with the own reverb in the development engine's
                                           * place shows an "R" after it, app.c HYB_RVTAG) */

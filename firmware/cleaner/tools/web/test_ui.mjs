@@ -123,7 +123,7 @@ const PROD = w.infekt.I.product, VER = FW.versionOf(PROD).version, VRE = VER.rep
 check("five tabs, Installation shown", d.querySelectorAll(".tabs [role=tab]").length === 5 && !$("panel-install").hidden && $("panel-waves").hidden &&
       $("panel-editor").hidden && $("panel-guide").hidden);
 check("German first", d.documentElement.lang === "de" && $("tab-install").textContent === "Installation" && /Verbinden/.test($("d-connect").textContent));
-check(`the embedded firmware: ${$("i-fw1").textContent}`, /^FM-1_13\d{6}$/.test(PROD) && new RegExp("InfeKt-FM1 " + VRE).test($("i-fw1").textContent) &&
+check(`the embedded firmware: ${$("i-fw1").textContent}`, /^FM-1_(49|13)\d{6}$/.test(PROD) && new RegExp("InfeKt-FM1 " + VRE).test($("i-fw1").textContent) &&
       !$("i-go").disabled && new RegExp(VRE).test($("i-go").textContent));
 check("m-bootloader offered (its SHA-256 checked), its licence shown when embedded", !$("i-mbootopt").hidden &&
       $("f-bootlic").hidden === !JSON.parse($("fwdata").textContent).boot.license);
@@ -376,6 +376,15 @@ check(`the port lost: ${lcd()}`, /Getrennt/.test(lcd()));
 dev.up("FM-1_13009400");
 await until(() => w.infekt.DEV.state === "ok", 6000);
 check("found again by itself", w.infekt.DEV.state === "ok");
+// ---- added (1.19.5): the identity's prefix FM-1_49; a device with the former FM-1_13 (1.19) and one with the new
+// prefix both this firmware, named with their versions ----
+for (const [id, re] of [["FM-1_13011900", /InfeKt-FM1 1\.19(?!\.)/], ["FM-1_49011905", /InfeKt-FM1 1\.19\.5/], ["FM-1_4900", /InfeKt-FM1/]]) {
+  dev.down(); dev.up(id);
+  await until(() => w.infekt.DEV.state === "ok", 6000);
+  check(`${id} found as this firmware: ${lcd()}`, w.infekt.DEV.state === "ok" && re.test(lcd()));
+}
+dev.down(); dev.up("FM-1_13009400");
+await until(() => w.infekt.DEV.state === "ok", 6000);
 
 // ---- an install end to end: 0.94 -> the loader -> the embedded one ----
 dev.plan = ["ota-FM-1_1", PROD];

@@ -7,9 +7,25 @@ static int host_jv(const char *a)          /* (jrn, drpokes) "h-10": JR_N / 2 - 
     return a[0] == 'h' ? (int)JR_N / 2 + atoi(a + 1) : a[0] == 'f' ? (int)JR_N + atoi(a + 1) : atoi(a);
 }
 static uint16_t host_non[16][128];        /* the notes out (mk.sh's hook): on less off a channel's note (0 at least) */
+static uint32_t host_mon[16];              /* (1.19.2) the note-ons out on each channel since "moclr" */
+static uint16_t host_mnn[16][128];         /* (1.19.3) each note's note-ons out since "moclr" ("monote") */
+static uint8_t host_mnv[16][128];          /* (1.19.3) its last velocity */
+static uint32_t host_mot[64], host_motn, host_mt0;   /* (1.19.4) the note-ons' times out since "momark" (ms after it) */
+static uint32_t host_mos[4][64], host_mosn[4];       /* ("mosave": kept to compare, "modelta") */
+#ifdef HOST_XM
+static double host_xnow;                   /* (1.19.5) the block's time, s (app_render's frames counted: "xm") */
+static uint32_t host_xnn;                  /* the note-ons' times since "xmmark" (host_xnt) */
+static double host_xnt[8192];
+static int host_xmk;
+#endif
 static void host_midi_tap(uint32_t pkt, uint32_t to)
 {
     const uint32_t st = pkt >> 8 & 0xFFu, n = pkt >> 16 & 0x7Fu, v = pkt >> 24 & 0x7Fu;
+#ifdef HOST_XM
+    if (host_xmk && (st & 0xF0u) == 0x90u && v && host_xnn < 8192u) host_xnt[host_xnn++] = host_xnow;
+#endif
+    if ((st & 0xF0u) == 0x90u && v && host_motn < 64u) host_mot[host_motn++] = plat_ms() - host_mt0;
+    if ((st & 0xF0u) == 0x90u && v) { host_mon[st & 15u]++; host_mnn[st & 15u][n]++; host_mnv[st & 15u][n] = (uint8_t)v; }
     if ((st & 0xF0u) == 0x90u && v) host_non[st & 15u][n]++;
     else if (((st & 0xF0u) == 0x80u || (st & 0xF0u) == 0x90u) && host_non[st & 15u][n]) host_non[st & 15u][n]--;
     else if ((st & 0xF0u) == 0xB0u && (n == 123u || n == 120u)) {   /* (all notes off: the channel's) */
@@ -233,9 +249,72 @@ static double host_rm_e, host_rm_mark = -999.;   /* (0.92) the output's power si
 static double host_sd_e;                 /* (after 0.99) the side's power since "rmsreset": (L - R) / 2 ("sideis") */
 static uint32_t host_rm_n;
 static uint32_t host_bl_n;
+#ifdef HOST_XM
+/* (1.19.5) a simulated MIDI clock master ("xm"): ticks sent at its tempo (24 a beat; "xmtempo": a jump or a linear
+ * ramp), each arriving at its send time plus a uniform jitter (+- jit, never before the one before) or at the next
+ * multiple of a burst period (Bluetooth's connection events), some dropped ("xmdrop"); the ticks due at a block's start
+ * go in (USB) before it renders, as the platform's would. The beats' send times are kept: "xmstat" measures the
+ * note-ons out (SEQ A's pattern 1, a note a beat) against them */
+static struct {
+    int on;
+    double ts, bpm0, bpm1, rt0, rt1;     /* the next tick's send time; the tempo from bpm0 to bpm1 over rt0 .. rt1 (s) */
+    double jit, burst, alast, late;      /* the jitter, the burst period (s); the last arrival; the arrivals' lateness summed */
+    uint32_t k, nb, drop, seed, nl;      /* ticks sent, beats kept, ticks to drop, the noise's state, lateness count */
+    double t0, beat[16384];              /* xm's start; each beat's send time */
+    struct { double t; uint8_t st; } q[256];
+    uint32_t qw, qr, iw, ir;             /* the queue in flight; arrived, to plat_midi_in */
+    uint8_t in[256];
+} hx;
+static double host_xf;                   /* the frames rendered */
+static double hx_rnd(void) { hx.seed = hx.seed * 1664525u + 1013904223u; return (double)(hx.seed >> 8) / 16777216.; }
+static void hx_push(double a, uint8_t st)
+{
+    if (a < hx.alast) a = hx.alast;
+    hx.alast = a;
+    if (hx.qw - hx.qr < 256u) { hx.q[hx.qw % 256u].t = a; hx.q[hx.qw++ % 256u].st = st; }
+}
+static double hx_bpm(double t)
+{
+    if (t <= hx.rt0) return hx.bpm0;
+    if (t >= hx.rt1) return hx.bpm1;
+    return hx.bpm0 + (hx.bpm1 - hx.bpm0) * (t - hx.rt0) / (hx.rt1 - hx.rt0);
+}
+static void hx_block(void)
+{
+    while (hx.on && hx.ts <= host_xnow + 0.05) {   /* (sent up to 50 ms ahead: the arrivals ordered) */
+        double a = hx.ts;
+        if (hx.burst > 0.) a = ceil(a / hx.burst - 1e-9) * hx.burst;
+        else if (hx.jit > 0.) a += hx.jit * (2. * hx_rnd() - 1.);
+        if (hx.k % 24u == 0u && hx.nb < 16384u) hx.beat[hx.nb++] = hx.ts;
+        if (hx.drop) hx.drop--;
+        else { hx_push(a, 0xF8u); hx.late += hx.alast - hx.ts; hx.nl++; }
+        hx.k++;
+        hx.ts += 60. / (24. * hx_bpm(hx.ts));
+    }
+    while (hx.qr != hx.qw && hx.q[hx.qr % 256u].t <= host_xnow + 1e-9) {
+        if (hx.iw - hx.ir < 256u) hx.in[hx.iw++ % 256u] = hx.q[hx.qr % 256u].st;
+        hx.qr++;
+    }
+}
+#undef plat_midi_in
+static int host_midi_in(uint32_t *pkt, int *port)
+{
+    if (hx.ir != hx.iw) {
+        *pkt = 0x0Fu | (uint32_t)hx.in[hx.ir++ % 256u] << 8;
+        if (port) *port = PORT_USB;
+        return 1;
+    }
+    return plat_midi_in(pkt, port);
+}
+#endif
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)   /* (mk.sh: the app's, its output hashed) */
 {
     uint32_t k;
+#ifdef HOST_XM
+    host_xnow = host_xf / (double)S.fs;
+    hx_block();
+    host_xf += (double)n;
+#endif
     app_render_dut(lr, n, master_q12);
     for (k = 0; k < 2u * n; k++) host_oh = (host_oh ^ (uint32_t)lr[k]) * 16777619u;
     host_on++;
@@ -1953,6 +2032,250 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
 #endif
         return 1;
     }
+    if (!strcmp(cmd, "gcnt")) {          /* (1.19.2) a check: note a's gated voices on part d (default A): b of them,
+                                          * c of those held by the sustain pedal (gate 2; c "-": not checked); FAIL else */
+        const int p = d[0] ? atoi(d) : 0;
+        const sy_synth *s = HOST_PART(p < HOST_NP ? p : 0);
+        int i, n = 0, h = 0;
+        for (i = 0; i < HOST_NV(s); i++)
+            if (s->v[i].on && s->v[i].gate && s->v[i].key == atoi(a)) { n++; h += s->v[i].gate == 2; }
+        printf("%s gcnt %s part %d: %d gated, %d held by the pedal\n",
+               n != atoi(b) || (c[0] && c[0] != '-' && h != atoi(c)) ? "FAIL" : "  ok", a, p, n, h);
+        return 1;
+    }
+    if (!strcmp(cmd, "pedis")) {         /* (1.19.2) a check: the sustain pedal down (1) or up (0) in part A's engine
+                                          * (a) and part B's (b, the builds with two parts); its CC 64 value (c, "-":
+                                          * not checked) as the matrix reads it; FAIL else */
+        int bad = S.sustain_hold != atoi(a) || (c[0] && c[0] != '-' && S.cc[64] != atoi(c));
+#ifdef HYB_MULTI
+        if (b[0] && SB.sustain_hold != atoi(b)) bad = 1;
+        printf("%s pedis A %d B %d cc64 %d\n", bad ? "FAIL" : "  ok", S.sustain_hold, SB.sustain_hold, S.cc[64]);
+#else
+        printf("%s pedis A %d cc64 %d\n", bad ? "FAIL" : "  ok", S.sustain_hold, S.cc[64]);
+#endif
+        return 1;
+    }
+#ifdef HYB_MULTI
+    if (!strcmp(cmd, "pmccis")) {        /* (1.19.2) a check: PLAY mode's control a (0 K1 .. 6 ALGO) on MIDI CC b ("OFF":
+                                          * none), LEARN armed for control c (given; "-" none); FAIL else */
+        const int w = strcmp(b, "OFF") ? atoi(b) + 1 : 0;
+        const int bad = set.pm_cc[atoi(a) % 7] != w || (c[0] && pm_learn != (c[0] == '-' ? 0 : atoi(c) + 1));
+        printf("%s pmccis %s %s %s (%d, learn %d)\n", bad ? "FAIL" : "  ok", a, b, c, set.pm_cc[atoi(a) % 7] - 1, pm_learn - 1);
+        return 1;
+    }
+    if (!strcmp(cmd, "pmset")) { set.pm_cc[atoi(a) % 7] = (uint8_t)atoi(b); return 1; }   /* (1.19.2) a control's CC
+                                          * as stored (0 OFF, 1 + the controller), any value */
+    if (!strcmp(cmd, "peis")) {          /* (1.19.2) a check: the assignment editor's line a reads b ("_" a space); its
+                                          * strip c and d (given); FAIL else */
+        char w[48] = "", x[40] = "", y[40] = "", wb[48] = "", wc[40] = "", wd[40] = "", pre[6] = "";
+        uint32_t k, fl = 0;
+        int bad;
+        for (k = 0; k < 47u && b[k]; k++) wb[k] = b[k] == '_' ? ' ' : b[k];
+        for (k = 0; k < 39u && c[k]; k++) wc[k] = c[k] == '_' ? ' ' : c[k];
+        for (k = 0; k < 39u && d[k]; k++) wd[k] = d[k] == '_' ? ' ' : d[k];
+        pv_fill();
+        pe_item((uint32_t)atoi(a), w, pre, &fl);
+        play_lcd(x, y);
+        bad = strcmp(w, wb) || (c[0] && strcmp(x, wc)) || (d[0] && strcmp(y, wd));
+        printf("%s peis %s \"%s\" strip \"%s\" \"%s\"\n", bad ? "FAIL" : "  ok", a, w, x, y);
+        return 1;
+    }
+    if (!strcmp(cmd, "ebyteis")) {       /* (1.19.2) a check: part A's engine's patch byte a is b (the panel not
+                                          * checked: the fixed map's CCs go to the engine alone); FAIL else */
+        printf("%s ebyteis %s %s (%d)\n", S.patch[atoi(a) & 255] != atoi(b) ? "FAIL" : "  ok", a, b, S.patch[atoi(a) & 255]);
+        return 1;
+    }
+#endif
+#ifdef HOST_XM
+    if (!strcmp(cmd, "clkl")) { set.ck_fl = (uint8_t)(atoi(a) ? 0u : CK_FL_UNLOCK); return 1; }   /* (1.19.5) CLK LOCK
+                                          * on (1) / off (0), as GLO's line sets it */
+    if (!strcmp(cmd, "clklis")) {        /* (1.19.5) a check: CLK LOCK as GLO shows it (ON / OFF) */
+        const int on = !(set.ck_fl & CK_FL_UNLOCK);
+        printf("%s clklis %s (%s)\n", on == !strcmp(a, "ON") ? "  ok" : "FAIL", a, on ? "ON" : "OFF");
+        return 1;
+    }
+    if (!strcmp(cmd, "xm")) {            /* (1.19.5) xm BPM [JIT_MS [BURST_MS [SEED]]]: the simulated master's START
+                                          * and its clock from now (the first tick with START); "xm stop": STOP */
+        if (!strcmp(a, "stop")) { hx.on = 0; hx_push(host_xnow, 0xFCu); return 1; }
+        memset(&hx, 0, sizeof hx);
+        hx.on = 1;
+        hx.t0 = hx.ts = hx.alast = host_xnow;
+        hx.bpm0 = hx.bpm1 = atof(a);
+        hx.rt0 = hx.rt1 = 0.;
+        hx.jit = c[0] || b[0] ? atof(b) * 1e-3 : 0.;
+        hx.burst = c[0] ? atof(c) * 1e-3 : 0.;
+        hx.seed = d[0] ? (uint32_t)atoi(d) : 1u;
+        hx_push(host_xnow, 0xFAu);
+        return 1;
+    }
+    if (!strcmp(cmd, "xmtempo")) {       /* (1.19.5) xmtempo BPM [MS]: the master's tempo to BPM, at once or a linear ramp */
+        hx.bpm0 = hx_bpm(hx.ts);
+        hx.bpm1 = atof(a);
+        hx.rt0 = hx.ts;
+        hx.rt1 = hx.ts + (b[0] ? atof(b) * 1e-3 : 0.);
+        if (hx.rt1 <= hx.rt0) hx.bpm0 = hx.bpm1;
+        return 1;
+    }
+    if (!strcmp(cmd, "xkis")) {          /* (1.19.5) CLK LOCK's state, printed */
+        printf("  xkis %s: st %u lk %u pend %u cnt %u e %.2f ms ri %.4f per %.1f bpm %.2f mt %u\n", a, xk.st, xk.lk, xk.pend,
+               xk.cnt, (double)xk.e * 1e3, (double)xk.ri, (double)xk.per, (double)S.bpm_now, (unsigned)ck.mt);
+        return 1;
+    }
+    if (!strcmp(cmd, "xmdrop")) { hx.drop = (uint32_t)atoi(a); return 1; }   /* (1.19.5) the next N ticks lost */
+    if (!strcmp(cmd, "xmmark")) { host_xnn = 0; host_xmk = 1; return 1; }   /* (1.19.5) the note-ons' times from now */
+    if (!strcmp(cmd, "xmpull")) {        /* (1.19.5) xmpull FROM_S THR_MS [WANT_MS]: the time from FROM s after xm until
+                                          * the notes' error (as xmstat's) stays within WANT +- THR */
+        const double pf = hx.t0 + atof(a), thr = atof(b), want = c[0] ? atof(c) : 0.;
+        double plast = -1., emax = 0.;
+        uint32_t i, j = 0;
+        for (i = 0; i < host_xnn && hx.nb; i++) {
+            const double t = host_xnt[i];
+            double er;
+            while (j + 1u < hx.nb && fabs(hx.beat[j + 1u] - t) <= fabs(hx.beat[j] - t)) j++;
+            er = (t - hx.beat[j]) * 1e3 - want;
+            if (t < pf) continue;
+            if (fabs(er) > emax) emax = fabs(er);
+            if (fabs(er) > thr) plast = t;
+        }
+        printf("  xmpull from %s s: the largest error %.2f ms, within %s ms after %.2f s\n", a, emax, b,
+               plast < pf ? 0. : plast - pf);
+        return 1;
+    }
+    if (!strcmp(cmd, "xmstat")) {        /* (1.19.5) xmstat LABEL T0 T1 [MAXERR_MS[:WANT_MS]]: the
+                                          * note-ons between T0 and T1 s after xm against the master's beats (each to
+                                          * the nearest): count, beats without a note or with two (want 0), the error
+                                          * (note - beat, ms) mean / min / max, the step-to-step jitter (one error less
+                                          * the one before: rms, max), the error every 30 s; a check: max |error - WANT|
+                                          * <= MAXERR, no lost or double steps (no MAXERR: printed alone, "--") */
+        const double t0 = hx.t0 + atof(b), t1 = hx.t0 + atof(c), mx = d[0] ? atof(d) : 1e9,
+                     want = d[0] && strchr(d, ':') ? atof(strchr(d, ':') + 1) : 0.;
+        static uint8_t hit[16384];
+        double sum = 0., lo = 1e9, hi = -1e9, js = 0., jm = 0., ep = 0., ck = 30.;
+        uint32_t i, nn = 0, lost = 0, dbl = 0, j = 0, nj = 0, bad;
+        memset(hit, 0, sizeof hit);
+        printf("  xmstat %s:", a);
+        for (i = 0; i < host_xnn; i++) {
+            const double t = host_xnt[i];
+            double er;
+            if (t < t0 || t > t1 || !hx.nb) continue;
+            while (j + 1u < hx.nb && fabs(hx.beat[j + 1u] - t) <= fabs(hx.beat[j] - t)) j++;
+            er = (t - hx.beat[j]) * 1e3;
+            if (hit[j] < 255u) hit[j]++;
+            sum += er; nn++;
+            if (er < lo) lo = er;
+            if (er > hi) hi = er;
+            if (nn > 1u) { const double dj = er - ep; js += dj * dj; nj++; if (fabs(dj) > jm) jm = fabs(dj); }
+            ep = er;
+            if (t - hx.t0 >= ck) { printf(" @%.0fs %.1f", t - hx.t0, er); ck += 30.; }
+        }
+        for (i = 0; i < hx.nb; i++)
+            if (hx.beat[i] > t0 + 0.25 && hx.beat[i] < t1 - 0.25 && hx.beat[i] < host_xnow - 0.25) {
+                if (!hit[i]) lost++;
+                else if (hit[i] > 1u) dbl++;
+            }
+        printf("\n");
+        bad = !nn || lost || dbl || hi - want > mx || want - lo > mx;
+        printf("%s xmstat %s: %u notes, lost %u, double %u; error mean %.2f min %.2f max %.2f ms (want %.0f +- %.1f); "
+               "step jitter rms %.2f max %.2f ms; arrivals late %.2f ms mean", !d[0] ? "  --" : bad ? "FAIL" : "  ok", a, (unsigned)nn,
+               (unsigned)lost, (unsigned)dbl, nn ? sum / nn : 0., lo, hi, want, mx, nj ? sqrt(js / nj) : 0., jm,
+               hx.nl ? hx.late / hx.nl * 1e3 : 0.);
+        printf("\n");
+        return 1;
+    }
+#endif
+    if (!strcmp(cmd, "momark")) { host_motn = 0; host_mt0 = plat_ms(); return 1; }   /* (1.19.4) the note-ons' times
+                                          * afresh, from now */
+    if (!strcmp(cmd, "mosave")) {        /* (1.19.4) the times since momark kept as set a (0..3); printed */
+        const uint32_t k = (uint32_t)atoi(a) & 3u;
+        uint32_t i;
+        memcpy(host_mos[k], host_mot, sizeof host_mot); host_mosn[k] = host_motn;
+        printf("  mosave %u: %u notes:", (unsigned)k, (unsigned)host_motn);
+        for (i = 0; i < host_motn && i < 20u; i++) printf(" %u", (unsigned)host_mot[i]);
+        printf("\n");
+        return 1;
+    }
+    if (!strcmp(cmd, "modelta")) {       /* (1.19.4) a check: set y's note-on times less set x's (a "x:y"), notes b .. c - 1
+                                          * (both sets that many), each within d (ms, "-20:3": -20 +- 3); FAIL else */
+        const uint32_t x = (uint32_t)atoi(a) & 3u, y = (uint32_t)atoi(strchr(a, ':') ? strchr(a, ':') + 1 : a) & 3u,
+                       i0 = (uint32_t)atoi(b), i1 = (uint32_t)atoi(c);
+        const int w = atoi(d), tol = strchr(d, ':') ? atoi(strchr(d, ':') + 1) : 0;
+        int lo = 99999, hi = -99999, bad = host_mosn[x] < i1 || host_mosn[y] < i1;
+        uint32_t i;
+        for (i = i0; i < i1 && !bad; i++) {
+            const int dd = (int)host_mos[y][i] - (int)host_mos[x][i];
+            if (dd < lo) lo = dd;
+            if (dd > hi) hi = dd;
+        }
+        bad |= lo < w - tol || hi > w + tol;
+        printf("%s modelta %u %u notes %u..%u: %d .. %d ms (want %s; counts %u %u)\n", bad ? "FAIL" : "  ok", (unsigned)x,
+               (unsigned)y, (unsigned)i0, (unsigned)i1 - 1u, lo, hi, d, (unsigned)host_mosn[x], (unsigned)host_mosn[y]);
+        return 1;
+    }
+    if (!strcmp(cmd, "mochs")) {         /* (1.19.4) the note-ons out since moclr on each channel ("ch2:4"), labelled a */
+        uint32_t k;
+        printf("  mochs %s:", a);
+        for (k = 0; k < 16u; k++) if (host_mon[k]) printf(" ch%u:%u", (unsigned)k + 1u, (unsigned)host_mon[k]);
+        printf("\n");
+        return 1;
+    }
+#ifdef HYB_MULTI
+    if (!strcmp(cmd, "gvx")) {           /* (1.19.4) a GLO line's value to list entry b, as turned there (gv_set): ain
+                                          * (OFF, OMNI, 1..16), aout (OFF, 1..16), bin, bout, clko (0 = -50 ms), clk */
+        static const char *const N[6] = {"ain", "aout", "bin", "bout", "clko", "clk"};
+        static const uint8_t G[6] = {G_CH, G_OCH, G_MCHB, G_BOUT, G_CLKO, G_CLK};
+        uint32_t k;
+        for (k = 0; k < 6u && strcmp(a, N[k]); k++)
+            ;
+        if (k < 6u) gv_set(G[k], (uint32_t)atoi(b)); else printf("FAIL gvx: no %s\n", a);
+        return 1;
+    }
+#endif
+    if (!strcmp(cmd, "moclr")) { memset(host_mon, 0, sizeof host_mon); memset(host_mnn, 0, sizeof host_mnn); return 1; }   /* (1.19.2) the
+                                          * counts afresh */
+    if (!strcmp(cmd, "monote")) {        /* (1.19.3) a check: note-ons out on channel a (1..16) of note b since moclr: c
+                                          * ("N+": at least N), and (d given) the last one's velocity d; FAIL else */
+        const uint32_t ch = (uint32_t)(atoi(a) - 1) & 15u, nt = (uint32_t)atoi(b) & 127u, n = host_mnn[ch][nt],
+                       w = (uint32_t)atoi(c), ge = strchr(c, '+') != 0, bad = (ge ? n < w : n != w)
+                                                                         || (d[0] && host_mnv[ch][nt] != atoi(d));
+        printf("%s monote ch %s note %s: %u (want %s) vel %u\n", bad ? "FAIL" : "  ok", a, b, (unsigned)n, c,
+               (unsigned)host_mnv[ch][nt]);
+        return 1;
+    }
+    if (!strcmp(cmd, "mohang")) {        /* (1.19.3) a check: no note left on out over MIDI on channel a (1..16; 0: any
+                                          * channel): note-ons less note-offs, all notes off clearing; FAIL else */
+        uint32_t ch, nt, k = 0;
+        for (ch = 0; ch < 16u; ch++)
+            for (nt = 0; nt < 128u; nt++)
+                if ((!atoi(a) || ch + 1u == (uint32_t)atoi(a)) && host_non[ch][nt]) {
+                    if (!k) printf("  mohang: ch %u note %u on\n", (unsigned)ch + 1u, (unsigned)nt);
+                    k++;
+                }
+        printf("%s mohang %s (%u on)\n", k ? "FAIL" : "  ok", a, (unsigned)k);
+        return 1;
+    }
+    if (!strcmp(cmd, "mochis")) {        /* (1.19.2) a check: note-ons out on channel a (1..16) since moclr: at least b
+                                          * (b 0: none); FAIL else */
+        const uint32_t c = (uint32_t)(atoi(a) - 1) & 15u, n = host_mon[c], w = (uint32_t)atoi(b);
+        printf("%s mochis ch %s %u (want %s%s)\n", (w ? n < w : n != 0) ? "FAIL" : "  ok", a, (unsigned)n, w ? ">= " : "",
+               b);
+        return 1;
+    }
+    if (!strcmp(cmd, "seta")) {          /* (1.19.3) SEQ A: pattern a (0 NONE, else 1..32); b given: the drums' pattern
+                                          * (0 NONE, else 1..16) */
+        int p = atoi(a);
+#ifdef HYB_MULTI
+        const uint8_t mi = sq_mi;
+        sq_mi = 0;
+#endif
+        if (p) { set.sq_pat = (uint8_t)(p - 1); set.sq_pad &= (uint8_t)~SQ_DISARM; sq_load(set.sq_pat); }
+        else set.sq_pad |= SQ_DISARM;
+#ifdef HYB_MULTI
+        sq_mi = mi;
+#endif
+        if (b[0] && atoi(b)) { set.dr_pat = (uint8_t)(atoi(b) - 1); set.sq_pad &= (uint8_t)~DR_DISARM; dr_load(set.dr_pat); }
+        else if (b[0]) set.sq_pad |= DR_DISARM;
+        return 1;
+    }
     if (!strcmp(cmd, "setb")) {          /* SEQ B: pattern a (0 NONE, else 1..32), split b */
 #ifdef HYB_MULTI
         int p = atoi(a);
@@ -2061,6 +2384,16 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         return 1;
     }
     if (!strcmp(cmd, "sqlog")) { sq_log = atoi(a); return 1; }   /* the arp sequencers' notes printed (1) or not */
+    if (!strcmp(cmd, "sqlset")) {        /* (1.19.3) arp sequencer a's (0 A, 1 B) pattern in RAM: step b's (1..64) LENGTH
+                                          * index c (0 .. SQ_LTOP; 17: a bar), not saved */
+#ifdef HYB_MULTI
+        sq_step_t *t = &sqpa[atoi(a) & 1].st[(uint32_t)(atoi(b) - 1) & 63u];
+#else
+        sq_step_t *t = &sqp.st[(uint32_t)(atoi(b) - 1) & 63u];
+#endif
+        t->la = (uint8_t)((t->la & ~31u) | ((uint32_t)atoi(c) & 31u));
+        return 1;
+    }
     if (!strcmp(cmd, "sqlen")) {         /* step a's (1..64) LENGTH: its index, its ticks; b: the index wanted (FAIL
                                           * else) */
         const uint32_t k = (uint32_t)atoi(a) - 1u, l = sqp.st[k & 63u].la & 31u;
@@ -2454,6 +2787,14 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
 #endif
         return 1;
     }
+    if (!strcmp(cmd, "lnmidi")) {        /* (1.19.3) a check: the launcher's SYNTH 2 column drawn as SEQ B's MIDI-only one
+                                          * (SINGLE: grey cells, "MIDI" for its knob) a 1, or as part B's (a 0); FAIL else */
+#ifdef HYB_MULTI
+        const int m = (int)(ln_sigc(0u, 2u) >> 13 & 1u);
+        printf("%s lnmidi %d (want %s)\n", m != atoi(a) ? "FAIL" : "  ok", m, a);
+#endif
+        return 1;
+    }
     if (!strcmp(cmd, "lngrey")) {        /* (1.18C21) a check: the selected row's cells of the parts muted are drawn light grey: the
                                           * columns a (bits, as lnvol's) */
 #ifdef HYB_MULTI
@@ -2469,7 +2810,7 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         const int v[3] = {set.sq_pad & SQ_DISARM ? 0 : set.sq_pat + 1, set.sqb_pad & SQ_DISARM ? 0 : set.sqb_pat + 1,
                           set.sq_pad & DR_DISARM ? 0 : set.dr_pat + 1};
         int bad = 0, q;
-        if (ln.play && ck.mt - ln.r0 >= 64u && !(ln.next && ln.sw - ck.mt <= 160u)) for (q = 0; q < 3; q++) if (!(q == 1 && LN_BOFF) && v[q] != set.ln[ln.play - 1u][q]) bad = 1;
+        if (ln.play && ck.mt - ln.r0 >= 64u && !(ln.next && ln.sw - ck.mt <= 160u)) for (q = 0; q < 3; q++) if (v[q] != set.ln[ln.play - 1u][q]) bad = 1;
         printf("%s lnok row %d seq %d %d %d cur %d %d %d\n", bad ? "FAIL" : "  ok", ln.play, v[0], v[1], v[2],
                ln_cur(0) + 1, ln_cur(1) + 1, ln_cur(2) + 1);
 #endif
@@ -2536,6 +2877,13 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
     if (!strcmp(cmd, "lsedge")) {        /* (1.18C27) SELECT past row 1 / 16 opens the sets' page (1, as built) or stops (0) */
 #ifdef HYB_MULTI
         ls_noedge = (uint8_t)!atoi(a);
+#endif
+        return 1;
+    }
+    if (!strcmp(cmd, "sqbcyc")) {        /* (1.19.3) SEQ's round in SINGLE with SEQ B (a 1, the firmware's) or without it
+                                          * (a 0, as before 1.19.3: the host's default, the older scripts' way round) */
+#ifdef HYB_MULTI
+        sqb_nocyc = (uint8_t)!atoi(a);
 #endif
         return 1;
     }
@@ -2930,6 +3278,7 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         const felucca_font_t *fa = &FONT_L, *fv = &FONT_L;
         int32_t room = 232 - 14, wv;
         if (a[0] == 'g') glo_lcd(x, y);
+        else if (a[0] == 'p') play_lcd(x, y);   /* (1.19.2: "play", PLAY mode's page or its editor) */
         else { text_cat(x, ui.msg[0]); text_cat(y, ui.msg[1]); }
         wv = y[0] ? text_w(fv, y) + 10 : 0;
         if (text_w(fa, x) + wv > room) fa = &FONT_M;
@@ -2947,6 +3296,28 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         for (k = 0; k < 23u && b[k]; k++) wb[k] = b[k] == '_' ? ' ' : b[k];
         glo_lcd(x, y);
         printf("%s glolcdhas \"%s\" \"%s\"\n", !strstr(y, wa) || (wb[0] && strstr(y, wb)) ? "FAIL" : "  ok", x, y);
+        return 1;
+    }
+    if (!strcmp(cmd, "glopageis")) {     /* (1.19.1) a check: the lines of GLO's page shown are a, by name, in this order
+                                          * ("TRANSPOSE,VELOCITY,..."; "_" for a space); FAIL else */
+        char w[400] = "", x[400] = "";
+        uint32_t i;
+        for (i = 0; i < GLO_PN[ui.gpage]; i++) { if (i) strcat(w, ","); strcat(w, G_NAME[GLO_PAGE[ui.gpage][i]]); }
+        for (i = 0; i < sizeof x - 1u && a[i]; i++) x[i] = a[i] == '_' ? ' ' : a[i];
+        printf("%s glopageis page %u: %s\n", strcmp(w, x) ? "FAIL" : "  ok", ui.gpage, w);
+        return 1;
+    }
+    if (!strcmp(cmd, "glodimis")) {      /* (1.19.1) a check: the line named a on GLO's page shown is drawn dimmed (b 1) or
+                                          * not (b 0; glo_item's LS_DIM, 32; 1.19.3: no line dims any more); FAIL else
+                                          * (or no such line) */
+        char w[24] = "", t[40] = "", pre[6] = "";
+        uint32_t i, fl = 0;
+        for (i = 0; i < 23u && a[i]; i++) w[i] = a[i] == '_' ? ' ' : a[i];
+        for (i = 0; i < GLO_PN[ui.gpage] && strcmp(G_NAME[GLO_PAGE[ui.gpage][i]], w); i++)
+            ;
+        if (i == GLO_PN[ui.gpage]) { printf("FAIL glodimis %s: not on page %u\n", a, ui.gpage); return 1; }
+        glo_item(i, t, pre, &fl);
+        printf("%s glodimis %s %d\n", (int)!!(fl & 32u) != atoi(b) ? "FAIL" : "  ok", a, (int)!!(fl & 32u));
         return 1;
     }
     if (!strcmp(cmd, "glopos")) {        /* GLO (0.81): the cursor to the line named a (one word: AUDIO, REVERB; "_" for a
@@ -3034,7 +3405,11 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
     if (!strcmp(cmd, "settrunc")) {      /* (1.18C31) the settings object rewritten as its first a bytes (an older
                                           * release's object, e.g. 208: VELOCITY's, before DRUM CHANNEL) */
         static uint8_t w[sizeof(settings_t)];
-        const int n = plat_store_load(OBJ_SETTINGS, w, sizeof w), m = atoi(a);
+        const int n = plat_store_load(OBJ_SETTINGS, w, sizeof w), m = 0
+#ifdef HOST_XM
+            + (!strcmp(a, "osc") ? (int)__builtin_offsetof(settings_t, osc_ok) : 0)   /* (1.19.5: an object before OSC) */
+#endif
+            + atoi(a);
         printf("  settrunc %d of %d: %d\n", m, n, n >= m ? plat_store_save(OBJ_SETTINGS, w, (uint32_t)m) : -1);
         return 1;
     }
@@ -3075,6 +3450,9 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         else if (!strcmp(a, "mx_uni")) k = (int)__builtin_offsetof(settings_t, mx_uni);
         else if (!strcmp(a, "mx_unim")) k = (int)__builtin_offsetof(settings_t, mx_unim);
         else if (!strcmp(a, "mx_unx")) k = (int)__builtin_offsetof(settings_t, mx_unx);
+#ifdef HOST_XM
+        else if (!strcmp(a, "ck_fl")) k = (int)__builtin_offsetof(settings_t, ck_fl);   /* (1.19.5: CLK LOCK's byte) */
+#endif
 #endif
         if (k >= 0 && k < n) w[k] = (uint8_t)atoi(b);
         printf("  setpoke %d = %d of %d: %d\n", k, atoi(b), n, k < n ? plat_store_save(OBJ_SETTINGS, w, (uint32_t)n) : -1);

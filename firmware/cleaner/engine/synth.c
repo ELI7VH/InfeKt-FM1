@@ -1561,6 +1561,7 @@ SY_COLD static void note_on(sy_synth *s, int key, int vel)
         }
         for (i = 0; i < s->max_voices; i++)
             if (s->v[i].on && s->v[i].gate) {   /* legato: the pitch moves, the envelopes go on */
+                s->v[i].gate = 1;       /* (a voice the sustain pedal held: the new key's, held by it) */
                 s->v[i].target = (float)key;
                 s->v[i].key = (uint8_t)key;
                 if (!porta) s->v[i].glide = (float)key;
@@ -1651,6 +1652,28 @@ SY_COLD static void voice_release(sy_synth *s, sy_voice_t *v)
     if (v->fenv.stage) v->fenv.stage = 4;
 }
 
+static uint8_t ped_now;                 /* (1.19.2) the note-off applied now is a key's (MIDI, the keys), the sustain
+                                         * pedal down: its voices held (rel_voices). Not the arpeggiator's own note-offs:
+                                         * its notes keep their gates, the pedal holds its keys (ped_k) */
+/* the voices of key (gate 1; key -1: the voices the sustain pedal holds, gate 2, every key) released: HYBRID, oldest
+ * first, a note's unison voices in their order (read on the order their phases are handed over); older: only those
+ * up to mark. Under the sustain pedal (ped_now) a key's voices are held instead: gate 2 (sustain) */
+SY_COLD static void rel_voices(sy_synth *s, int key, int older, uint32_t mark)
+{
+    int i;
+    for (;;) {
+        int b = -1;
+        for (i = 0; i < SY_NV(s); i++) {
+            const sy_voice_t *v = &s->v[i];
+            if (v->on && v->gate == (key < 0 ? 2 : 1) && (key < 0 || v->key == key) && (!older || v->age <= mark) &&
+                (b < 0 || v->age < s->v[b].age || (v->age == s->v[b].age && v->uni_i < s->v[b].uni_i))) b = i;
+        }
+        if (b < 0) break;
+        if (key >= 0 && ped_now) s->v[b].gate = 2;
+        else voice_release(s, &s->v[b]);
+    }
+}
+
 SY_COLD static void note_off(sy_synth *s, int key)
 {
     int i;
@@ -1695,7 +1718,7 @@ SY_COLD static void note_off(sy_synth *s, int key)
         uint32_t mark = s->age_mark;
         if (EV_ONS_FIRST)
             for (i = 0; i < SY_NV(s); i++)
-                if (s->v[i].on && s->v[i].gate && s->v[i].key == key && s->v[i].age <= s->age_mark) older = 1;
+                if (s->v[i].on && s->v[i].gate == 1 && s->v[i].key == key && s->v[i].age <= s->age_mark) older = 1;
         if (EV_ONS_FIRST && off_pre) {  /* CLEANER (1.18C34 fix): an off queued before its key's note-on in this block
                                          * is the notes' before it: their voices alone end; none left (the note-on took
                                          * the part's last voice, the old note's: a part with one voice, an arp pattern
@@ -1703,17 +1726,7 @@ SY_COLD static void note_off(sy_synth *s, int key)
             older = 1;
             mark = off_lim;
         }
-        for (;;) {                      /* the voices release oldest first, a note's unison voices in their
-                                         * order (read on the order their phases are handed over) */
-            int b = -1;
-            for (i = 0; i < SY_NV(s); i++) {
-                const sy_voice_t *v = &s->v[i];
-                if (v->on && v->gate && v->key == key && (!older || v->age <= mark) &&
-                    (b < 0 || v->age < s->v[b].age || (v->age == s->v[b].age && v->uni_i < s->v[b].uni_i))) b = i;
-            }
-            if (b < 0) break;
-            voice_release(s, &s->v[b]);
-        }
+        rel_voices(s, key, older, mark);
     }
 #if SLIDE_SOLO
     {   /* a note struck in the same block as the last other key's release (a slide) counts as struck alone:
@@ -1740,6 +1753,7 @@ void sy_all_off(sy_synth *s)
     int i;
     for (i = 0; i < SY_NV(s); i++) if (s->v[i].on) voice_release(s, &s->v[i]);
     for (i = 0; i < 128; i++) s->held[i] = s->arp_vel[i] = s->arp_chord_k[i] = 0;
+    for (i = 0; i < 16; i++) s->ped_k[i] = 0;
 #ifdef SY_UNI_CAP
     s->upn = 0;
 #endif
@@ -1818,6 +1832,27 @@ static void arp_switch(sy_synth *s, int on)
     }
 }
 
+/* 1.19.2: the sustain pedal (CC 64). MEASURED on the reference as a black box (tools/measure/pedal_meas.py,
+ * PROVENANCE.md "Sustain pedal"): down at any value from 1, up at 0 alone (no other threshold, no hysteresis); a key
+ * let go while it is down sounds on until it comes up (its voices gate 2: rel_voices), then all such notes end
+ * together; pressed after a key's release it does nothing to that note; a key struck again under it takes a new
+ * voice beside the held one, which ends at pedal up; mono: the key stack as without it, the last note sounding on;
+ * the arpeggiator plays its keys on (ped_k); unison notes alike; CC 64 stays a matrix source; CC 123 releases the held
+ * notes, the pedal still down. Per part (each part's own events) */
+SY_COLD static void sustain(sy_synth *s, int down)
+{
+    int k;
+    if (down || !s->sustain_hold) { s->sustain_hold = (uint8_t)down; return; }
+    s->sustain_hold = 0;
+    rel_voices(s, -1, 0, 0);
+    for (k = 0; k < 128; k++)
+        if (s->ped_k[k >> 3] >> (k & 7) & 1u) {
+            s->ped_k[k >> 3] &= (uint8_t)~(1u << (k & 7));
+            if (s->patch[B_ARP]) arp_note_off(s, k);
+            else note_off(s, k);        /* (the arpeggiator turned off meanwhile: its keys sound as plain notes) */
+        }
+}
+
 SY_COLD static void apply_event(sy_synth *s, const sy_event_t *e)
 {
     int ty = e->st & 0xF0, ch = e->st & 0x0F;
@@ -1850,17 +1885,22 @@ SY_COLD static void apply_event(sy_synth *s, const sy_event_t *e)
     switch (ty) {
     case 0x90:
         if (e->d2) {
-            if (s->patch[B_ARP]) arp_note_on(s, e->d1, e->d2);
-            else note_on(s, e->d1 & 127, e->d2);
+            if (s->patch[B_ARP]) {
+                s->ped_k[(e->d1 & 127) >> 3] &= (uint8_t)~(1u << (e->d1 & 7));   /* (down again: its own) */
+                arp_note_on(s, e->d1, e->d2);
+            } else note_on(s, e->d1 & 127, e->d2);
             break;
         }
         /* velocity 0: a note off */
-        if (s->patch[B_ARP]) { arp_note_off(s, e->d1); break; }
-        note_off(s, e->d1 & 127);
-        break;
+        /* fall through */
     case 0x80:
-        if (s->patch[B_ARP]) { arp_note_off(s, e->d1); break; }
-        note_off(s, e->d1 & 127);
+        if (!s->patch[B_ARP]) {
+            ped_now = s->sustain_hold;
+            note_off(s, e->d1 & 127);
+            ped_now = 0;
+        } else if (s->sustain_hold) s->ped_k[(e->d1 & 127) >> 3] |= (uint8_t)(1u << (e->d1 & 7));   /* (the pedal holds
+                                         * the arpeggiator's key: it plays on until pedal up) */
+        else arp_note_off(s, e->d1);
         break;
     case 0xB0:
         s->cc[e->d1 & 127] = e->d2;
@@ -1868,8 +1908,13 @@ SY_COLD static void apply_event(sy_synth *s, const sy_event_t *e)
         if (!(s->patch[B_SMOOTH] & 1u) || !s->cc_seen[e->d1 & 127]) { s->ccs[e->d1 & 127] = (float)e->d2; s->cc_inc[e->d1 & 127] = 0.f; }
         else cc_dirty = 1;              /* (it glides from this block on) */
         s->cc_seen[e->d1 & 127] = 1;
-        if (e->d1 == 120 || e->d1 == 123) sy_all_off(s);
-        else if (e->d1 != 1 && e->d1 != 64 && e->d1 < 120) sy_set_param(s, e->d1, e->d2);   /* page A = the controllers */
+        if (e->d1 == 120 || e->d1 == 123) {
+            sy_all_off(s);              /* (the notes the pedal holds too, as the reference's CC 123) */
+            if (e->d1 == 120) s->sustain_hold = 0;   /* CLEANER: all sound off (the firmware's PANIC sends it, the
+                                         * reference ignores it) forgets the pedal too: a pedal-up lost no longer
+                                         * holds every note after it */
+        } else if (e->d1 == 64) sustain(s, e->d2 != 0);   /* (and a matrix source, s->cc[64], as before) */
+        else if (e->d1 != 1 && e->d1 < 120) sy_set_param(s, e->d1, e->d2);   /* page A = the controllers */
         break;
     case 0xE0: {
         int b = (e->d2 << 7 | e->d1) - 8192;
@@ -4396,7 +4441,24 @@ static uint32_t prof_t;
 /* the engine's synth size, for a firmware's check that its own sy_synth (synth.h with its SY_MAX_VOICES) matches */
 const unsigned sy_synth_size = sizeof(sy_synth);
 
-static int clip_in_render = 1;          /* (0 while sy_render_i24 does the clip itself, with the scaling) */
+#ifdef SY_I24_ONLY
+#define SY_CLIP_ATTR __attribute__((used))
+#else
+#define SY_CLIP_ATTR
+#endif
+static int clip_in_render SY_CLIP_ATTR = 1;   /* (0 while sy_render_i24 does the clip itself, with the scaling) */
+#ifdef SY_I24_ONLY                      /* (a firmware that renders through the _i24 entries alone: their clip in
+                                         * i24_out, sy_render's own never runs; the flag kept where it was) */
+#define CLIP_IN_RENDER 0
+#else
+#define CLIP_IN_RENDER clip_in_render
+#endif
+#define CLIP_SET(v) (clip_in_render = (v))
+#ifdef SY_NO_SOFTCLIP                    /* (a firmware that never sets SY_OPT_SOFTCLIP: the soft limiter's code out) */
+#define SOFTCLIP_ON(o) 0
+#else
+#define SOFTCLIP_ON(o) (((o) & SY_OPT_SOFTCLIP) != 0)
+#endif
 static uint8_t out_zero;                /* the last block's output: zeros, known (the effects at rest; sy_render_i24) */
 /* the effects at rest (sy_fx.c SY_FX_REST): part A's / the single engine's chain on its input (z: all 0), skipped
  * when it rests. HYB_MULTI: part A's space takes B's send, at rest only while that is held at 0 (sy_fx_quiet), B
@@ -4584,10 +4646,10 @@ void sy_render(sy_synth *s, float *out_l, float *out_r, const float *in_l, const
     }
     out_zero = (uint8_t)fx_rest;
     PROF(5);
-    if (clip_in_render)
+    if (CLIP_IN_RENDER)
     for (i = 0; i < SY_BLOCK; i++) {               /* the output: a hard clip at full scale */
         float l = out_l[i], r = out_r[i];
-        if (s->opt & SY_OPT_SOFTCLIP) { l = sy_tanh(l); r = sy_tanh(r); }
+        if (SOFTCLIP_ON(s->opt)) { l = sy_tanh(l); r = sy_tanh(r); }
         out_l[i] = sy_clampf(l, -1.f, 1.f);
         out_r[i] = sy_clampf(r, -1.f, 1.f);
     }
@@ -4631,14 +4693,14 @@ int sy_render_i24(sy_synth *s, int32_t *lr, float g)
 {
     float *restrict l = sy_work.l, *restrict r = sy_work.r;
     int i;
-    clip_in_render = 0;
+    CLIP_SET(0);
     sy_render(s, l, r, 0, 0);
-    clip_in_render = 1;
+    CLIP_SET(1);
     if (out_zero) {                     /* (the effects at rest: zeros, known) */
         for (i = 0; i < 2 * SY_BLOCK; i++) lr[i] = 0;
         return 1;
     }
-    SY_FAR(i24_out)(lr, l, r, g, (s->opt & SY_OPT_SOFTCLIP) != 0);
+    SY_FAR(i24_out)(lr, l, r, g, SOFTCLIP_ON(s->opt));
     return 0;
 }
 
@@ -5105,10 +5167,10 @@ static void render2(sy_multi_t *mm, float *out_l, float *out_r, const float *in_
     }
     out_zero = fx2_zero;
     PROF(5);
-    if (clip_in_render)
+    if (CLIP_IN_RENDER)
         for (i = 0; i < SY_BLOCK; i++) {
             float l = out_l[i], r = out_r[i];
-            if (P[0]->opt & SY_OPT_SOFTCLIP) { l = sy_tanh(l); r = sy_tanh(r); }
+            if (SOFTCLIP_ON(P[0]->opt)) { l = sy_tanh(l); r = sy_tanh(r); }
             out_l[i] = sy_clampf(l, -1.f, 1.f);
             out_r[i] = sy_clampf(r, -1.f, 1.f);
         }
@@ -5129,14 +5191,14 @@ int sy_multi_render_i24(sy_multi_t *m, int32_t *lr, float g)
 {
     float *restrict l = sy_work.l, *restrict r = sy_work.r;
     int i;
-    clip_in_render = 0;
+    CLIP_SET(0);
     sy_multi_render(m, l, r, 0, 0);
-    clip_in_render = 1;
+    CLIP_SET(1);
     if (out_zero) {                     /* (the effects at rest: zeros, known) */
         for (i = 0; i < 2 * SY_BLOCK; i++) lr[i] = 0;
         return 1;
     }
-    SY_FAR(i24_out)(lr, l, r, g, (m->p[0]->opt & SY_OPT_SOFTCLIP) != 0);
+    SY_FAR(i24_out)(lr, l, r, g, SOFTCLIP_ON(m->p[0]->opt));
     return 0;
 }
 #endif

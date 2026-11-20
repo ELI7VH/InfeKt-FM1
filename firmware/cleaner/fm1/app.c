@@ -589,6 +589,8 @@ static const uint8_t SQ_EVL[] = {SQ_CHORD, 1, 2, 3, 4, 5, 6, 7, 8, 9, SQ_POLY};
                                           * Never a pattern's pad bit (sq_defaults, sq_clr_to: SQ_PADM) */
 #define SQ_PCM (3u << SQ_PC_SH)
 #define SQ_PCB (set.sq_def >> SQ_PC_SH & 3u)
+#define SQ_DOUT 0x20u                    /* (1.19.3) set.sq_def bit 5: GLO > SEQ > DRUM OUT, the drums' local hits out over
+                                          * MIDI on DRUM CHANNEL (dr_out; 0 OFF, as shipped and in every older object) */
 #define SQ_DEF0 (SQ_PARP | 2u << SQ_PC_SH)   /* (1.18C48, the user's choice) GLO > SEQ as shipped: PATCH ARP ON, PRECOUNT 2
                                           * BARS (KEY LATCH, REC QUANT ON as before). Until 1.18C47 0: PATCH ARP OFF,
                                           * PRECOUNT OFF. A settings object keeps its own (0 as shipped or chosen: it
@@ -847,7 +849,8 @@ typedef struct {
     uint8_t flt_sm;                      /* (after 1.18C34, in OSC's padding: 1.18C22 .. C34 saved it 0, ORIGINAL, and load
                                           * it as 0) FILT KNOBS: 0 ORIGINAL (a new cutoff / resonance value steps), 1
                                           * SMOOTH (it glides: synth.c flt_glide) */
-    uint8_t osc_pad;
+    uint8_t ck_fl;                       /* (1.19.5, in OSC's padding: 1.18C22 .. 1.19.4 saved 0 there and clear it at
+                                          * load) CK_FL_UNLOCK: GLO > MIDI > CLK LOCK OFF (0: ON, an older object's) */
     /* (1.18C26, GLO > VELOCITY: added after OSC; an object saved before is SET_LEN_V14 bytes or less: the defaults,
      * velocity on, NORMAL, SENSITIVITY 0, DRUM ACC RAW, the top row with the row's ends) */
     uint8_t ve_ok;                       /* VE_V1: the fields below hold the player's */
@@ -857,7 +860,8 @@ typedef struct {
     int8_t ve_sens;                      /* SENSITIVITY: -5 .. +5 (touch_curve's other way round: + louder) */
     uint8_t ve_lo[7], ve_hi[7];          /* CALIBRATE: the top row's keys' own ends (the probe's peak for 1 and for 127,
                                           * touch_top_ends); ve_hi 0: none, the row's */
-    uint8_t ve_pad;
+    int8_t ck_ofs;                       /* (1.19.4, in VELOCITY's padding: 1.18C26 .. 1.19.3 saved 0 there and clear it
+                                          * at load) GLO > MIDI > CLK OFFSET, -50 .. +50 ms (ck_shift) */
     /* (1.18C31, GLO > MIDI > DRUM CHANNEL: added after VELOCITY; an object saved before is SET_LEN_V15 bytes or less:
      * channel 10. An older firmware loads its first SET_LEN_V15 bytes, plat_store_load's max, and saves those) */
     uint8_t dc_ok;                       /* DC_V1: dr_ch holds the player's */
@@ -866,7 +870,16 @@ typedef struct {
                                           * load) GLO > AUDIO's unison caps past the older fields' ranges: bits 0-2 UNI MAX
                                           * MULTI + 1 (0: as shipped, MX_UNIL_DEF), bit 3 UNI MAX SINGLE 4 (mx_uni holds 3,
                                           * which an older firmware reads), bit 4 MONO UNI MAX 6 (mx_unim holds 5) */
-    uint8_t dc_pad;
+    uint8_t mo;                          /* (1.19.4, in DRUM CHANNEL's padding: 1.18C31 .. 1.19.3 saved 0 there and clear
+                                          * it at load) the parts' MIDI out and the new IN values: bits 0-4 B OUT (MO_B:
+                                          * 1 OFF, 2 .. 17 channel 1 .. 16; 0: an older object's, then B CHANNEL's
+                                          * channel, OFF: OUT CHANNEL's, as 1.19.3 sent), MO_AOFF A OUT OFF (out_ch
+                                          * kept), MO_AINOFF A IN OFF (midi_ch 0, OMNI to an older firmware), MO_BOMNI
+                                          * B IN OMNI (mx_chb 0, OFF to an older firmware) */
+    /* (1.19.2, PLAY mode's controls on MIDI CCs: added after DRUM CHANNEL; an object saved before is SET_LEN_V16 bytes
+     * or less: every control OFF. 1.19.1 loads the first SET_LEN_V16 bytes, plat_store_load's max, and saves those) */
+    uint8_t pc_ok;                       /* PC_V1: pm_cc holds the player's */
+    uint8_t pm_cc[7];                    /* each PLAY mode control's MIDI CC (PC_N's order): 0 OFF, 1 + the controller */
 #endif
 } settings_t;
 #define SET_LEN_V1 8                     /* the first release's settings: magic, oct, patch, lat, ble_off */
@@ -900,6 +913,14 @@ typedef struct {
 #define SET_LEN_V14 188                  /* 1.18C22's: GLO > AUDIO > OSC too */
 #define SET_LEN_V15 208                  /* 1.18C26's: GLO > VELOCITY too */
 #define SET_LEN_V16 212                  /* 1.18C31's: GLO > MIDI > DRUM CHANNEL too */
+#define SET_LEN_V17 220                  /* 1.19.2's: PLAY mode's controls' MIDI CCs too */
+#define PC_V1 1u
+#define MO_B 31u                         /* settings_t mo: B OUT (1.19.4) */
+#define MO_AOFF 32u                      /* A OUT OFF */
+#define MO_AINOFF 64u                    /* A IN OFF */
+#define MO_BOMNI 128u                    /* B IN OMNI */
+#define CK_OFS_MAX 50                    /* CLK OFFSET's range, ms */
+#define CK_FL_UNLOCK 1u                  /* settings_t ck_fl: CLK LOCK OFF (1.19.5) */
 #define DC_V1 1u
 #define DR_CH_DEF 10u                    /* DRUM CHANNEL as shipped (GM's drum channel) */
 #define OSC_V1 1u
@@ -1008,9 +1029,9 @@ _Static_assert(__builtin_offsetof(settings_t, md_ok) >= SET_LEN_V9, "the tenth r
 _Static_assert(__builtin_offsetof(settings_t, mx_ok) == SET_LEN_V10 && __builtin_offsetof(settings_t, sqb_pad) == SET_LEN_V11
                && __builtin_offsetof(settings_t, ln_ok) == SET_LEN_V12 && __builtin_offsetof(settings_t, osc_ok) == SET_LEN_V13
                && __builtin_offsetof(settings_t, ve_ok) == SET_LEN_V14 && __builtin_offsetof(settings_t, dc_ok) == SET_LEN_V15
-               && sizeof(settings_t) == SET_LEN_V16,
+               && __builtin_offsetof(settings_t, pc_ok) == SET_LEN_V16 && sizeof(settings_t) == SET_LEN_V17,
                "the two parts' settings after the eleventh release's, SEQ B's after them, the launcher's, OSC's, VELOCITY's, "
-               "DRUM CHANNEL last");
+               "DRUM CHANNEL's, PLAY mode's CCs last");
 _Static_assert(__builtin_offsetof(settings_t, flt_sm) == SET_LEN_V13 + 2u, "FILT KNOBS in OSC's padding (its byte 186, "
                "0 in every object 1.18C22 .. C34 saved)");
 #else
@@ -1029,6 +1050,29 @@ static UI_LATE int pv_cc(uint32_t c, uint32_t v)   /* audio interrupt: controlle
     uint32_t p, t = 0;
     for (p = 0; p < 2u; p++)
         if (pv_cc_of(p) == c) { pv_vol[p] = (uint8_t)v; t = 1; }
+    return (int)t;
+}
+/* (1.19.2) PLAY mode's controls on MIDI CCs (GLO's settings, pm_cc; set in the assignment editor: K2 the number, SHIFT +
+ * REC LEARN, pm_learn): a controller assigned to a control sets its parameter as the control would (pmcc_run, the main
+ * loop: edit_set on the part edited, v x max / 127), in PLAY mode and out of it; taken before VOL A / B CC and the fixed
+ * map (not to the engine). CC 1, 64, 120, 123 and the VOL A / B CCs are never taken by learn nor by K2 (pm_cc_bad):
+ * the wheel, the pedal, all notes off and the parts' volumes stay as they are */
+static volatile uint8_t pmcc_v[7] PLAT_POOL;   /* a control's value in, | 0x80 (the last one; pmcc_run takes it) */
+static volatile uint8_t pmcc_arm PLAT_POOL;    /* LEARN armed (pmcc_run: the editor's control waiting) */
+static volatile uint8_t pmcc_lrn PLAT_POOL;    /* the controller learn took, | 0x80 */
+static UI_LATE int pm_cc_bad(uint32_t c)
+{
+    return c == 1u || c == 64u || c == 120u || c == 123u || c == pv_cc_of(0) || c == pv_cc_of(1);
+}
+static UI_LATE int pmcc_in(uint32_t c, uint32_t v)   /* audio interrupt: controller c, value v; 1 = taken */
+{
+    uint32_t k, t = 0;
+    if (pmcc_arm && !pm_cc_bad(c)) {     /* (learning: the controller's number, nothing set) */
+        pmcc_lrn = (uint8_t)(c | 0x80u);
+        return 1;
+    }
+    for (k = 0; k < 7u; k++)
+        if (set.pm_cc[k] == c + 1u) { pmcc_v[k] = (uint8_t)(v | 0x80u); t = 1; }
     return (int)t;
 }
 #endif
@@ -1074,6 +1118,17 @@ static const uint8_t CS_PORT[CS_N] = {0, PORT_USB, PORT_TRS, PORT_BLE};   /* CLO
 #define HYB_EDITION " USB"                /* (GLO > ABOUT: the USB build told apart) */
 #endif
 #define HYB_RVTAG ""                     /* (GLO > ABOUT: the own reverb is the release's; 1.18C6 .. 1.18C49 showed "R") */
+#ifdef HYB_MULTI
+static UI_LATE void midi_send_p(uint32_t p, uint32_t st, uint32_t d1, uint32_t d2)   /* (1.19.4) a channel message
+                                          * (st: its kind, 0x80 .. 0xE0) of part p (0 A, 1 B) on its OUT (GLO > MIDI >
+                                          * A CHANNEL > OUT: out_ch, B's: mo) to OUT PORTS; OFF: nothing */
+{
+    const uint32_t to = midi_to(), c = p ? (set.mo & MO_B) - 2u : set.mo & MO_AOFF ? 16u : set.out_ch;
+    st = (st & 0xF0u) | (c & 15u);
+    if (to && c < 16u) plat_midi_send(st >> 4 | st << 8 | d1 << 16 | d2 << 24, to);
+}
+#define midi_send_ch(st, d1, d2) midi_send_p(0u, st, d1, d2)   /* (part A's) */
+#else
 static UI_LATE void midi_send_ch(uint32_t st, uint32_t d1, uint32_t d2)   /* a channel message (st: its kind, 0x80 ..
                                           * 0xE0) on OUT CHANNEL to OUT PORTS */
 {
@@ -1081,6 +1136,7 @@ static UI_LATE void midi_send_ch(uint32_t st, uint32_t d1, uint32_t d2)   /* a c
     st = (st & 0xF0u) | (set.out_ch & 15u);
     if (to) plat_midi_send(st >> 4 | st << 8 | d1 << 16 | d2 << 24, to);
 }
+#endif
 
 static void qa_defaults(settings_t *s)   /* the quick-access list as shipped: FILTER 1, AMP ENV, LFO 1, LFO 2 */
 {
@@ -1130,12 +1186,22 @@ static UI_LATE void ve_check(settings_t *s, int n)   /* GLO > VELOCITY: an older
     }
     for (k = 0; k < VE_NTOP; k++)
         if (s->ve_hi[k] <= s->ve_lo[k]) s->ve_lo[k] = s->ve_hi[k] = 0;   /* (no ends of its own) */
-    s->ve_pad = 0;
+    if (n < SET_LEN_V15 || s->ck_ofs < -CK_OFS_MAX || s->ck_ofs > CK_OFS_MAX) s->ck_ofs = 0;   /* (1.19.4: CLK OFFSET;
+                                          * an older object's 0) */
     if (n < SET_LEN_V16 || s->dc_ok != DC_V1 || s->dr_ch > 16u) {   /* (1.18C31: DRUM CHANNEL; an older object's, 10) */
         s->dc_ok = DC_V1;
         s->dr_ch = DR_CH_DEF;
     }
-    s->dc_pad = 0;
+    if (n < SET_LEN_V16 || !(s->mo & MO_B) || (s->mo & MO_B) > 17u)   /* (1.19.4: an older object: B OUT where SEQ B
+                                          * sent, B CHANNEL's channel, OFF: OUT CHANNEL's; A OUT OUT CHANNEL's; the IN
+                                          * values as stored) */
+        s->mo = (uint8_t)(s->mx_chb ? s->mx_chb + 1u : s->out_ch + 2u);
+    if (s->mx_chb) s->mo &= (uint8_t)~MO_BOMNI;   /* (the flags only with the old field at its stand-in, 0) */
+    if (s->midi_ch) s->mo &= (uint8_t)~MO_AINOFF;
+    if (n < SET_LEN_V17 || s->pc_ok != PC_V1) {   /* (1.19.2: PLAY mode's CCs; an older object's: all OFF) */
+        s->pc_ok = PC_V1;
+        for (k = 0; k < 7u; k++) s->pm_cc[k] = 0;
+    }
 }
 #endif
 static UI_LATE void md_defaults(settings_t *s)   /* MIDI in and out as shipped: channel 1 to USB and Bluetooth, every
@@ -1243,12 +1309,25 @@ static uint8_t ln_nocyc = 1;             /* (host tests: SEQ's round without the
 #define LN_CYC (!ln_nocyc)
 static uint8_t ls_noedge;                /* (host tests: SELECT up past row 1 stops there, as before 1.18C27: "lsedge 0") */
 #define LS_EDGE (!ls_noedge)
+static uint8_t sqb_nocyc = 1;            /* (host tests: SEQ's round in SINGLE without SEQ B, as before 1.19.3, unless
+                                          * "sqbcyc 1") */
+#define SQB_CYC (!sqb_nocyc)
 #else
 #define LN_CYC 1
 #define LS_EDGE 1
+#define SQB_CYC 1
 #endif
 #define LN_EP (ln.epd ? 2u : (uint32_t)ed_part)   /* (1.18C21) the part edited as the launcher shows it: SYNTH 1, SYNTH 2, the drums */
-#define LN_BOFF (set.mx_mode == SY_M_SINGLE)   /* (1.18C11: one synth only: SYNTH 2's column, knob and key off) */
+#define SQ_BMO (set.mx_mode == SY_M_SINGLE)   /* (1.19.3) SEQ B as a MIDI-only sequencer: SINGLE, where part B is not
+                                          * rendered. It runs, records and launches as in the other modes, its notes go
+                                          * to MIDI out alone (sq_out: B CHANNEL, OFF: OUT CHANNEL), its page and the
+                                          * launcher's SYNTH 2 column in grey with "MIDI ONLY" / "MIDI" (1.18C11 ..
+                                          * 1.19.2: LN_BOFF, SYNTH 2's column, knob and key off there) */
+#define LN_SILENT(q) ((q) == 2u ? set.eng == EN_MIDI : set.eng != EN_ALL || ((q) && SQ_BMO))   /* (1.19.3, the owner's
+                                          * rule) launcher row q has no internal sound (ENGINE; SEQ B in SINGLE): its
+                                          * MUTE mutes its MIDI out instead (sq_out, dr_out); with a sound MUTE is the
+                                          * audio's alone, MIDI goes on (as 1.19.2) */
+#define LN_MMUTE(q) ((ln_mute >> (q) & 1u) && LN_SILENT(q))
 static volatile uint8_t ln_mute PLAT_POOL;   /* the parts muted (bits: SYNTH 1, SYNTH 2, DRUMS; pv_glide, dr_level) */
 static UI_LATE void ln_open(void);
 static uint8_t ln_vq;                    /* the part whose volume the strip shows (1 + part, 0 none: its colour) */
@@ -1364,21 +1443,9 @@ static UI_LATE int sq_valid(const sq_pat_t *q, uint32_t k0, uint32_t k1)   /* st
     return (int)ok;
 }
 static UI_LATE void sq_load_to(sq_pat_t *q, uint32_t n);
-static UI_LATE void sq_bfree(uint32_t q, uint32_t n)   /* 1.18C19: SEQ A (q 0) takes pattern n: in SINGLE, where SEQ B plays
-                                          * nothing, B's claim on n (armed, as a multi mode left it) is released (NONE, its number
-                                          * kept). Before, it stayed and refused A's change back to n at the line ("Pattern IN
-                                          * USE": a launcher row never got its pattern back) */
-{
-#ifdef HYB_MULTI
-    if (q == 0u && set.mx_mode == SY_M_SINGLE && !(set.sqb_pad & SQ_DISARM) && set.sqb_pat == n) set.sqb_pad |= SQ_DISARM;
-#else
-    (void)q; (void)n;
-#endif
-}
 static UI_LATE void sq_load(uint32_t n)  /* pattern n from the store into sqp (sq_load_to). Read in place: the audio
                                           * interrupt may mix the two for a tick */
 {
-    sq_bfree(UN_SQI, n);
     sq_load_to(&sqp, n);
     sq_cut[UN_SQI] = 1u;                 /* (the notes of the pattern before off: a long one would sound on) */
     un_load(1u + UN_SQI);
@@ -1955,20 +2022,19 @@ static UI_LATE void sq_out(uint32_t p, uint32_t st, uint32_t note, uint32_t vel)
     if (fv_aud && !p) st |= 0x100u;      /* (1.18C33: the favorites editor's audition on part A: SEQ A's notes out
                                           * alone, it runs on unheard) */
 #ifdef HYB_MULTI
-    if (!(st & 0x100u)) eng_to(p ? EM_B : EM_A, st, note, vel);   /* (SEQ A plays part A, on OUT CHANNEL; SEQ B part
-                                          * B, on part B's channel, none set: OUT CHANNEL) */
+    if (!(st & 0x100u) && !(p && SQ_BMO)) eng_to(p ? EM_B : EM_A, st, note, vel);   /* (SEQ A plays part A, on OUT
+                                          * CHANNEL; SEQ B part B, on part B's channel, none set: OUT CHANNEL. 1.19.3:
+                                          * SINGLE, SEQ B MIDI out alone: part B has no voices there) */
     st &= 0xFFu;
-    if (p && set.mx_chb) {
-        const uint32_t to = midi_to(), s = (st & 0xF0u) | ((set.mx_chb - 1u) & 15u);
-        if (to) plat_midi_send(s >> 4 | s << 8 | note << 16 | vel << 24, to);
-        return;
-    }
+    if (st == 0x90u && LN_MMUTE(p)) return;   /* (1.19.3: its row muted, no sound of its own: no note-on out; the
+                                          * offs go on, its notes sounding were cut at the mute, ln_keys) */
+    midi_send_p(p, st, note, vel);       /* (1.19.4: SEQ A on A's OUT, SEQ B on B's; OFF: none) */
 #else
     (void)p;
     if (!(st & 0x100u)) eng_midi(st, note, vel);
     st &= 0xFFu;
-#endif
     midi_send_ch(st, note, vel);
+#endif
 }
 /* the preview's notes (0.85, sq_pv_play): the main loop's request, sq_pvq: the note (bits 0-6), on (bit 7), the
  * velocity (8-14), the part (15), a count (24-31: a new request; one overwritten before it was seen is dropped, its
@@ -2449,8 +2515,87 @@ static struct {
     float frac;
     float mfrac;                         /* CLOCK MASTER: the MIDI clock's fraction of a tick (24 a beat), carried */
     uint32_t mt;                         /* the clock's ticks since it started */
+#ifdef HYB_MULTI
+    int8_t ofs;                          /* (1.19.4) CLK OFFSET as taken (ms; 0: INTERNAL, MASTER) */
+    float adj;                           /* the shift still to make, s (+ earlier): at most a quarter of each block */
+#endif
     struct { uint32_t m0; uint32_t n; } q[CK_Q];   /* each of the last blocks' ticks: the first, how many */
 } ck;
+#ifdef HYB_MULTI
+/* (1.19.5) CLK LOCK (GLO > MIDI, ON as shipped; set.ck_fl): with CLOCK EXTERNAL the shared clock (ck) is steered onto
+ * the master's place, not only its tempo. The master's place: its ticks (24 a beat) counted from the first after
+ * START / CONTINUE (both a start from 0 here: the sequencers start from their first step on either; Song Position
+ * Pointer is not taken), taken modulo a beat. Each tick, at the block it came in (the blocks' frames the time base;
+ * Bluetooth's ticks come spaced as sent already, radio.c's ble_transport by their BLE MIDI timestamps), gives the
+ * error: the clock's place at that block's start less the master's, in s, plus CLK OFFSET (wanted: the clock ahead by
+ * -CLK OFFSET), wrapped to +- half a beat. The error's estimate (xk.e) takes each tick's with weight XK_A (the jitter of
+ * the ticks' arrival averaged) and follows the corrections made between ticks exactly; each block the clock runs
+ * faster or slower by XK_K x the estimate plus an integral (XK_KI; the tempo estimate's own bias, at most XK_IMAX),
+ * at most 25 % (CLK OFFSET's limit): no tick is skipped or doubled, the place never goes back, a large error (a tempo
+ * jump) is pulled in at the limit; nothing ever jumps (no resync but START's, as before). A tick lost on the way (a
+ * gap of 2 .. 5 spacings, round within 0.3, between normal ones: two before, two after) is counted in; while that is
+ * open no error is taken. Off (or no START seen since the clock came in, or the clock gone): 1.19.4's free run at the
+ * tempo with CLK OFFSET's one-off shift (ck.adj) */
+#define XK_K 4.f                         /* the loop's gain, 1/s: a 10 ms error 4 % faster / slower, ~1/e in 0.25 s */
+#define XK_KI 1.f                        /* the integral's gain, 1/s^2 */
+#define XK_IMAX 0.02f                    /* the integral at most (a tempo off by 2 %) */
+#define XK_A 0.125f                      /* a tick's error's weight in the estimate */
+#define XK_PN 8u                         /* the ticks after a long gap that decide whether ticks were lost */
+static struct {
+    uint8_t st;                          /* 0 no START known, 1 a START / CONTINUE in (its first tick to come), 2 counting */
+    uint8_t lk;                          /* the loop's estimate valid (the clock running, a tick taken) */
+    uint8_t pend;                        /* ticks maybe lost in a long gap (0 none): decided after XK_PN more ticks */
+    uint8_t pn;                          /* those ticks taken */
+    uint8_t cnt;                         /* the master's ticks since its first after START, modulo a beat (24) */
+    uint32_t t, tl;                      /* the blocks' frames, at this block's start; at the last tick */
+    float per;                           /* the ticks' spacing, frames (smoothed, 1/8) */
+    float oph;                           /* the clock's place at this block's start in its beat: its ticks (128 a beat) */
+    float e;                             /* the error's estimate, s (+: ahead of the master's place + CLK OFFSET) */
+    float ri;                            /* the integral, s / s (+: slower) */
+    float ps;                            /* the errors of the ticks after a long gap, summed (counted as they came) */
+} xk;                                    /* (RAM, 32 B: the pool's headroom is at its floor) */
+static UI_LATE void xk_rt(uint32_t st)   /* audio interrupt, CLOCK EXTERNAL: a clock or transport message taken */
+{
+    if (st == 0xFAu || st == 0xFBu) { xk.st = 1; xk.lk = 0; xk.tl = xk.t; return; }
+    if (st == 0xFCu) { xk.st = xk.lk = 0; return; }
+    if (st != 0xF8u || !xk.st) return;
+    if (xk.st == 1u) {                   /* (the first after START: the master's 0) */
+        xk.st = 2;
+        xk.cnt = 0;
+        xk.pend = 0;
+    } else {
+        const float g = (float)(xk.t - xk.tl), r = xk.per > 0.f ? g / xk.per : 1.f, k = (float)(int32_t)(r + 0.5f);
+        xk.cnt = (uint8_t)((xk.cnt + 1u) % 24u);
+        if (xk.pend && (r < 0.5f || r > 1.5f)) xk.pend = 0;   /* (no even run after it: a tempo change, no loss) */
+        else if (!xk.pend && xk.lk && r > 1.8f && r < 5.2f && r - k < 0.2f && k - r < 0.2f) {   /* (a gap of k
+                                          * spacings: k - 1 ticks lost? the next ticks' errors decide) */
+            xk.pend = (uint8_t)((uint32_t)k - 1u);
+            xk.pn = 0;
+            xk.ps = 0.f;
+        }
+        if (!xk.pend) xk.per = xk.per > 0.f ? xk.per + (g - xk.per) * 0.125f : g;   /* (held while one is open: the
+                                          * master's tempo before it) */
+    }
+    xk.tl = xk.t;
+    if (ck.on && (int32_t)ck.mt >= 0) {  /* the error: the clock's place at this block's start less the master's (its
+                                          * tick taken at that block) */
+        const float bpm = S.bpm_now > 1.f ? S.bpm_now : (float)S.patch[128 + 16] + 63.f;   /* (sq_block's) */
+        float d = xk.oph - (float)xk.cnt * (16.f / 3.f), e;
+        if (d >= 64.f) d -= 128.f; else if (d < -64.f) d += 128.f;
+        e = d * 15.f / (32.f * bpm) + (float)set.ck_ofs * 1e-3f;
+        if (!xk.lk) { xk.e = e; xk.ri = 0.f; xk.lk = 1; }
+        else if (!xk.pend) xk.e += (e - xk.e) * XK_A;
+        else if (xk.ps += e - xk.e, ++xk.pn >= XK_PN) {   /* (their errors as counted, against the estimate (which
+                                          * meanwhile follows the clock's tempo against the master's before the gap,
+                                          * sq_block): the gap's ticks lost if they are later by more than (pend - 0.3)
+                                          * ticks of 60 / 24 / bpm s) */
+            if (xk.ps * (1.f / (float)XK_PN) > ((float)xk.pend - 0.3f) * 2.5f / bpm)
+                xk.cnt = (uint8_t)((xk.cnt + xk.pend) % 24u);
+            xk.pend = 0;
+        }
+    }
+}
+#endif
 static UI_LATE float dr_decay(float t)   /* the factor a frame for -60 dB in t seconds (~exp(-6.9 / (t fs)), > 0) */
 {
     float x = 6.9078f * S.ifs / (t > 1e-4f ? t : 1e-4f);
@@ -2471,6 +2616,18 @@ static UI_LATE float dr_decay(float t)   /* the factor a frame for -60 dB in t s
 #include "sy_math.h"                     /* (the engine's float helpers: sy_tanh, sy_sin2pi, sy_floori) */
 extern const float SY_DIST5_G[128], SY_DIST5_L[128];
 #include "sy_cln_d14s.h"                 /* (the engine's curves 1-4: shapes and scales, sy_dist_tab.c; sy_d14_s) */
+/* (1.19.2) the app's exp2, log2, tanpi, db2lin, lin2db: the engine's shared flash functions (sy_tables.c under
+ * SY_HOT_RAM, the engine's units' flag: the same arithmetic as sy_math.h's inline ones, so the same bits) instead of
+ * an inlined copy at every site (-892 B). Only code in the flash calls them (the drums' compressor, DRIVE's setup, the
+ * hat's filters); sy_sin2pi stays inline (DRIVE's curve, sample by sample). */
+float sy_exp2_f(float x);
+float sy_log2_f(float x);
+float sy_tanpi_f(float f);
+#define sy_exp2(x) sy_exp2_f(x)
+#define sy_log2(x) sy_log2_f(x)
+#define sy_tanpi(x) sy_tanpi_f(x)
+#define sy_db2lin(x) sy_exp2_f((x) * 0.166096405f)
+#define sy_lin2db(x) (6.020599913f * sy_log2_f(x))
 enum { DV_WARM, DV_TANH, DV_LIGHT, DV_SOFT, DV_MIDDLE, DV_HARD, DV_DIGITAL, DV_SHAPER, DV_BITRED, DV_N };
 static struct {
     volatile uint8_t on;                 /* LEVEL above 100: dr_drive runs */
@@ -2998,6 +3155,36 @@ static uint32_t dr_jn, dr_jl, dr_jmax, dr_jsum, dr_jst, dr_jbd, dr_jw, dr_jc, dr
                                           * their sum; the steps passed, BD's hits, the store's writes before, the
                                           * changes at their line, BD's hits off the grid) */
 #endif
+#ifdef HYB_MULTI
+/* (1.19.3) GLO > SEQ > DRUM OUT ON: every hit played here (the drum sequencer's steps, the black keys and the steps
+ * heard on the drums' page, dr.prev; not the RECORD metronome's, not a note in on DRUM CHANNEL: never sent back) goes
+ * out over MIDI as a note on DRUM CHANNEL (OFF: none) to OUT PORTS, DR_GM's note (the map the notes in take; BD 36 of
+ * its two), the velocity from the accent (64, 100, 127: dr_mi_in's law takes each back to its accent). Its note-off
+ * at the next block (dr_moff: 3 .. 11 ms later; a drum module plays the hit whole), so none is left on by a stop, a
+ * PANIC or a setting changed. In every ENGINE (MIDI ONLY too, where the drums are silent); the launcher's MUTE silences
+ * the audio alone, unless the drums have no sound of their own (MIDI ONLY): then their MIDI (LN_MMUTE) */
+static const uint8_t DR_GMO[11] = {36, 38, 41, 45, 48, 37, 39, 42, 46, 49, 56};   /* (the instruments' order, DR_BD ..) */
+static uint16_t dr_mo PLAT_POOL;         /* the instruments sent, their note-offs due */
+static uint8_t dr_moc PLAT_POOL;         /* their channel (0 .. 15) */
+static UI_LATE void dr_moff(void)        /* audio interrupt: the note-offs due */
+{
+    const uint32_t to = midi_to(), st = 0x80u | dr_moc;
+    uint32_t m = dr_mo;
+    dr_mo = 0;
+    for (; m && to; m &= m - 1u) plat_midi_send(st >> 4 | st << 8 | (uint32_t)DR_GMO[__builtin_ctz(m)] << 16, to);
+}
+static UI_LATE void dr_out(uint32_t i, uint32_t sb)   /* audio interrupt: instrument i struck here (sb: its step byte) */
+{
+    const uint32_t c = (set.dr_ch - 1u) & 15u, st = 0x90u | c, a = (sb & 3u) > 2u ? 2u : sb & 3u, to = midi_to();
+    if (!(set.sq_def & SQ_DOUT) || !set.dr_ch || !to || LN_MMUTE(2u)) return;
+    if ((dr_mo >> i & 1u) || dr_moc != c) dr_moff();   /* (struck again before its off; the channel changed) */
+    plat_midi_send(st >> 4 | st << 8 | (uint32_t)DR_GMO[i] << 16 | (64u + 36u * a - (a >> 1) * 9u) << 24, to);
+    dr_mo |= (uint16_t)(1u << i);
+    dr_moc = (uint8_t)c;
+}
+#else
+#define dr_out(i, sb) ((void)0)
+#endif
 static UI_LATE void dr_tick(uint32_t t, uint32_t fl)   /* audio interrupt: the drums' tick t (1/8 step, from their
                                           * origin): its step's hits there (ALIGN 0 .. 7/8 late), the next step's early
                                           * ones (ALIGN -7/8 .. -1/8: 8 - its eighths into this step; over the loop's end
@@ -3024,6 +3211,7 @@ static UI_LATE void dr_tick(uint32_t t, uint32_t fl)   /* audio interrupt: the d
                 && !(sq_pvm & 4u)) {     /* (a
                                           * step held heard as it is turned: its hit alone, 0.94) */
                 dr_hit(i, sb);
+                dr_out(i, sb);                  /* (1.19.3: DRUM OUT) */
                 h |= 1u << i;
 #ifdef APP_HOST_CMD
                 dr_lastt[i] = (uint16_t)((t & (m * 8u + 7u)) + 1u);
@@ -3111,10 +3299,16 @@ static UI_LATE void sq_block(uint32_t frames)   /* audio interrupt, a block's st
 {
     uint32_t i, m0, n = 0, lat, to;
     float bpm;
+#ifdef HYB_MULTI
+    if (dr_mo) dr_moff();                /* (1.19.3: DRUM OUT's note-offs) */
+#endif
     if (dr.prev) {                       /* (an instrument to hear: a black key on the drums' page) */
         const uint32_t p = dr.prev;
         dr.prev = 0;
-        if ((p & 15u) - 1u < DR_NI) dr_hit((p & 15u) - 1u, (p >> 4 ^ DR_LEN1 << 2) & 0x1Fu);
+        if ((p & 15u) - 1u < DR_NI) {
+            dr_hit((p & 15u) - 1u, (p >> 4 ^ DR_LEN1 << 2) & 0x1Fu);
+            dr_out((p & 15u) - 1u, (p >> 4 ^ DR_LEN1 << 2) & 0x1Fu);   /* (1.19.3: DRUM OUT) */
+        }
 #ifdef APP_HOST_CMD
         dr_hpv = (uint16_t)(((p & 15u) - 1u) | ((p >> 4 ^ DR_LEN1 << 2) & 0x1Fu) << 8);
         dr_hpn++;
@@ -3171,6 +3365,10 @@ static UI_LATE void sq_block(uint32_t frames)   /* audio interrupt, a block's st
         ck.pre = (uint8_t)(pc_tk != 0u);
         pc_tk = 0;
         ck.frac = 0.f;
+#ifdef HYB_MULTI
+        ck.ofs = 0;                      /* (1.19.4: CLK OFFSET from the start's first tick, below) */
+        ck.adj = 0.f;
+#endif
         n = 1;
         if (eng.syn) {                   /* (the engine's arpeggiators in phase with it) */
             arp_realign(&S);
@@ -3181,6 +3379,12 @@ static UI_LATE void sq_block(uint32_t frames)   /* audio interrupt, a block's st
     }
     m0 = ck.mt;
     bpm = S.bpm_now > 1.f ? S.bpm_now : (float)S.patch[128 + 16] + 63.f;
+#ifdef HYB_MULTI
+    xk.t += frames;                      /* (1.19.5: CLK LOCK's time base; a new run's estimate afresh, the clock gone: no
+                                          * place known until the next START) */
+    if (!ck.on) xk.lk = 0;
+    if (xk.st && (float)(xk.t - xk.tl) > S.fs) xk.st = xk.lk = 0;   /* (no tick for 1 s, as the engine's tempo) */
+#endif
     to = midi_to();
     if (set.clk == CLK_MASTER && to) {   /* CLOCK MASTER: the MIDI clock out at the tempo, 24 a beat, from the block
                                           * clock with the fraction carried, as the shared clock's ticks below (a tick
@@ -3212,8 +3416,41 @@ static UI_LATE void sq_block(uint32_t frames)   /* audio interrupt, a block's st
         if (ck.on && (int32_t)ck.mt < 0) { m0 = ck.mt = ~0u; ck.frac = 1.f; }
     }
     if (ck.on) {
+#ifdef HYB_MULTI
+        xk.oph = (float)(ck.mt & 127u) + ck.frac;   /* (1.19.5: its place at this block's start, for CLK LOCK) */
+#endif
         ck.frac += (float)frames * bpm * (16.f * 2.f / 15.f) / S.fs;   /* (a tick at 1x: fs * 15 / bpm / 8 frames;
                                           * the clock's at 4x) */
+#ifdef HYB_MULTI
+        if (xk.lk && set.clk == CLK_EXT && S.xclk_on && !(set.ck_fl & CK_FL_UNLOCK)) {   /* (1.19.5) CLK LOCK: the
+                                          * clock steered onto the master's place (xk_rt) */
+            const float dt = (float)frames * S.ifs, m = dt * 0.25f;
+            float d = -(XK_K * xk.e + xk.ri) * dt;
+            if (d > m) d = m;
+            else if (d < -m) d = -m;
+            else {                       /* (the integral held while the limit acts) */
+                xk.ri += XK_KI * xk.e * dt;
+                xk.ri = xk.ri > XK_IMAX ? XK_IMAX : xk.ri < -XK_IMAX ? -XK_IMAX : xk.ri;
+            }
+            xk.e += d;
+            if (xk.pend) xk.e += dt * (bpm * xk.per * 0.4f * S.ifs - 1.f);   /* (a gap open: the clock's tempo against
+                                          * the master's before it, 60 fs / 24 / per) */
+            ck.frac += d * bpm * (16.f * 2.f / 15.f);
+            ck.adj = 0.f;                /* (CLK OFFSET is the loop's: no one-off shift beside it) */
+            ck.ofs = 0;
+        } else {   /* (1.19.4) CLK OFFSET, CLOCK EXTERNAL with a clock coming in alone: the clock's phase shifted by it (- earlier), by running at most
+             * 25 % faster or slower until it is made: from the start (its first step at once, with START, as before;
+             * the shift made within 4x the offset, 200 ms at most) and after a change while it runs (no tick lost or
+             * doubled: the ticks stay the fraction's) */
+            const int32_t o = set.clk == CLK_EXT && S.xclk_on ? set.ck_ofs : 0;   /* (a clock coming in) */
+            if (o != ck.ofs) { ck.adj += (float)(ck.ofs - o) * 1e-3f; ck.ofs = (int8_t)o; }
+            if (ck.adj != 0.f) {
+                const float m = (float)frames * S.ifs * 0.25f, d = ck.adj > m ? m : ck.adj < -m ? -m : ck.adj;
+                ck.adj -= d;
+                ck.frac += d * bpm * (16.f * 2.f / 15.f);
+            }
+        }
+#endif
         if (!n) m0++;
         for (; ck.frac >= 1.f && n < 32u; n++) {
             ck.frac -= 1.f;
@@ -4027,14 +4264,24 @@ static UI_LATE void sq_panic(void)       /* audio interrupt: all notes off (CC 1
         if (SQI.on) sq_all_off();
     }
 }
+static UI_LATE uint32_t in_parts(uint32_t st)   /* (1.19.4) audio interrupt: the parts a channel message in is for by
+                                          * its channel: bit 0 A (A CHANNEL > IN: OFF none, OMNI all), bit 1 B (CHANNELS
+                                          * alone: B CHANNEL > IN; its channel B alone, OMNI every channel, A's too) */
+{
+    const uint32_t c = st & 15u, a = !(set.mo & MO_AINOFF) && (!set.midi_ch || c + 1u == set.midi_ch);
+    if (M.mode != SY_M_CHANNELS) return a;
+    if (set.mo & MO_BOMNI) return a | 2u;
+    return M.ch_b >= 0 && c == (uint32_t)M.ch_b ? 2u : a;
+}
 static UI_LATE uint32_t sq_parts_in(uint32_t st, uint32_t d1)   /* audio interrupt: the parts a MIDI note in goes to
                                           * (1 A, 2 B, 3 both), as the engine's setup routes it (synth.c multi_route):
                                           * SINGLE A; LAYER both; SPLIT by the split; CHANNELS A, part B's channel B.
                                           * 1.18C31 (the user's rule: MIDI in plays as the panel's keys, CHANNELS
                                           * alone by channel): B CHANNEL no longer B alone in LAYER and SPLIT */
 {
-    if (M.mode == SY_M_SINGLE) return 1u;
-    if (M.mode == SY_M_CHANNELS && M.ch_b >= 0 && (st & 0x0Fu) == (uint32_t)M.ch_b) return 2u;
+    if (M.mode == SY_M_SINGLE) return sqr[1].on || sq_metro == 2u ? 3u : 1u;   /* (1.19.3: SEQ B in SINGLE, MIDI
+                                          * only: running, its input; RECORD armed on it, recorded, as the keys) */
+    if (M.mode == SY_M_CHANNELS) return in_parts(st);   /* (1.19.4: B IN OMNI too) */
     return M.mode == SY_M_LAYER ? 3u : M.mode == SY_M_SPLIT ? (d1 < (uint32_t)M.split ? 2u : 1u) : 1u;
 }
 static UI_LATE int sq_midi_in(uint32_t st, uint32_t d1, uint32_t d2)   /* audio interrupt: a MIDI message in; 1 = taken
@@ -4545,9 +4792,8 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         if (dr_mi_in(pkt)) continue;     /* (1.18C31: DRUM CHANNEL's notes, the drums') */
 #ifdef HYB_MULTI
         if (rt ? set.clk != CLK_EXT || (clk_src_eff() != CS_ANY && (uint32_t)port != CS_PORT[clk_src_eff() & 3u])
-               : (st & 0x80u) && set.midi_ch && (st & 0x0Fu) + 1u != set.midi_ch
-                 && !(M.mode == SY_M_CHANNELS && M.ch_b >= 0 && (st & 0x0Fu) == (uint32_t)M.ch_b))   /* (B's channel
-                                          * too: CHANNELS alone, 1.18C31) */
+               : (st & 0x80u) && !in_parts(st))   /* (B's channel too: CHANNELS alone, 1.18C31; 1.19.4: A IN OFF,
+                                          * B IN OMNI) */
             continue;
 #else
         if (rt ? set.clk != CLK_EXT || (clk_src_eff() != CS_ANY && (uint32_t)port != CS_PORT[clk_src_eff() & 3u])
@@ -4558,9 +4804,14 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         if (st == 0xFAu || st == 0xFBu) seq_req = 1u;   /* (CLOCK EXTERNAL's START / CONTINUE: the sequencers with a pattern
                                           * start; STOP: they stop; input() takes it) */
         else if (st == 0xFCu) seq_req = 2u;
+#ifdef HYB_MULTI
+        if (rt) xk_rt(st);               /* (1.19.5: CLK LOCK's count) */
+#endif
         if (st < 0xF0u && sq_midi_in(st, pkt >> 16 & 0x7Fu, pkt >> 24 & 0x7Fu))
             continue;                    /* (the sequencer runs: a note is its input) */
 #ifdef HYB_MULTI
+        if ((st & 0xF0u) == 0xB0u && pmcc_in(pkt >> 16 & 0x7Fu, pkt >> 24 & 0x7Fu)) continue;   /* (1.19.2: PLAY mode's
+                                          * controls' CCs, before the rest) */
         if ((st & 0xF0u) == 0xB0u && pv_cc(pkt >> 16 & 0x7Fu, pkt >> 24 & 0x7Fu)) continue;   /* (VOL A / B CC) */
 #endif
         if ((st & 0xF0u) == 0xB0u && (pkt >> 16 & 0x7Fu) == 7u && set.vol_cc) {
@@ -4569,6 +4820,11 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         }
         if ((st & 0xF0u) == 0xB0u) re_cc = 1u;   /* (the remote editor told, remote.c: the engine's page A) */
 #ifdef HYB_MULTI
+        if (M.mode == SY_M_CHANNELS && (set.mo & MO_BOMNI)) {   /* (1.19.4: B IN OMNI: part B every channel, A by
+                                          * A IN) */
+            if (in_parts(st) & 1u) eng_to(EM_A, st, pkt >> 16 & 0x7Fu, pkt >> 24 & 0x7Fu);
+            eng_to(EM_B, st, pkt >> 16 & 0x7Fu, pkt >> 24 & 0x7Fu);
+        } else
         eng_to(M.mode == SY_M_CHANNELS ? EM_IN : EM_KEYS, st, pkt >> 16 & 0x7Fu, pkt >> 24 & 0x7Fu);   /* (1.18C31:
                                           * as the keys but in CHANNELS, where B CHANNEL plays B alone; SPLIT by the
                                           * note number) */
@@ -4994,7 +5250,7 @@ static UI_SMALL int settings_load(settings_t *s)
     int n = plat_store_load(OBJ_SETTINGS, s, sizeof *s), ok;
     uint32_t k;
 #ifdef HYB_MULTI
-    ok = (n == (int)sizeof *s || n == SET_LEN_V15 || n == SET_LEN_V14 || n == SET_LEN_V13 || n == SET_LEN_V12
+    ok = (n == (int)sizeof *s || n == SET_LEN_V16 || n == SET_LEN_V15 || n == SET_LEN_V14 || n == SET_LEN_V13 || n == SET_LEN_V12
           || n == SET_LEN_V11 || n == SET_LEN_V10 || n == SET_LEN_V9 ||   /* (1.18C26: V14 and V13 too; 1.18C22-C25
                                           * took a V13 object for none, its settings the defaults) */
 #else
@@ -5028,7 +5284,7 @@ static UI_SMALL int settings_load(settings_t *s)
         glo_defaults(s);
     if (n < SET_LEN_V4K || s->key_dark > 2u) s->key_dark = 0;   /* (KL_ON, KL_OFF; KL_NIGHT 1.18C43) */
     if (n < SET_LEN_V4K || s->rv_q >= RVQ_N) s->rv_q = RVQ_DEF;
-    s->sq_def = (uint8_t)(n < SET_LEN_V4K ? (DEF47 ? 0u : SQ_DEF0) : s->sq_def & (SQ_PADM | SQ_PCM));   /* (GLO > SEQ,
+    s->sq_def = (uint8_t)(n < SET_LEN_V4K ? (DEF47 ? 0u : SQ_DEF0) : s->sq_def & (SQ_PADM | SQ_PCM | SQ_DOUT));   /* (GLO > SEQ,
                                           * 1.14: an older object as shipped; 1.18C40: PRECOUNT 0 .. 2) */
     if ((s->sq_def & SQ_PCM) == SQ_PCM) s->sq_def &= (uint8_t)~SQ_PCM;
 #ifdef HYB_MULTI
@@ -5094,7 +5350,7 @@ static UI_SMALL int settings_load(settings_t *s)
         s->osc_cl = 0;
     }
     if (n < SET_LEN_V14 || s->flt_sm > 1u) s->flt_sm = 0;   /* (FILT KNOBS: an older object's, ORIGINAL) */
-    s->osc_pad = 0;
+    s->ck_fl = n < SET_LEN_V14 ? 0u : s->ck_fl & CK_FL_UNLOCK;   /* (1.19.5: CLK LOCK; an older object's ON) */
     ve_check(s, n);
 #endif
     return 1;
@@ -5371,7 +5627,7 @@ static UI_LATE void mute_hint(uint32_t to)   /* a local key or a local start rea
                                           * renewed. Main loop only (a key's or a transport's handler, never the audio) */
 {
     static const char *const nm[3] = {"A", "B", "DR"};
-    const uint32_t m = to & ln_mute & (LN_BOFF ? 5u : 7u), now = plat_ms();
+    const uint32_t m = to & ln_mute & 7u, now = plat_ms();
     uint32_t q;
     char t[24];
     if (!m) return;
@@ -5379,7 +5635,7 @@ static UI_LATE void mute_hint(uint32_t to)   /* a local key or a local start rea
     for (q = 0; q < 3u; q++)
         if (m >> q & 1u) {
             if (t[0]) text_cat(t, "+");
-            text_cat(t, m == 4u ? "DRUMS" : q == 0u && LN_BOFF ? "SYNTH" : nm[q]);
+            text_cat(t, m == 4u ? "DRUMS" : q == 0u && SQ_BMO ? "SYNTH" : nm[q]);
         }
     text_cat(t, " MUTED");
     if (now < ui.msg_until && ui.msg[1][0] == 0 && text_eq(ui.msg[0], t)) {
@@ -5563,6 +5819,8 @@ static UI_LATE uint32_t sq_parts_key(uint32_t note)   /* the parts a key's note 
 {
     if (set.mx_mode == SY_M_LAYER) return 3u;
     if (set.mx_mode == SY_M_CHANNELS) return ed_part ? 2u : 1u;
+    if (SQ_BMO) return sqr[1].run ? 3u : 1u;   /* (1.19.3: SEQ B running in SINGLE takes the keys as its input, as in
+                                          * LAYER; part A plays them; SEQ A, if it runs, takes them too) */
     return set.mx_mode == SY_M_SPLIT && (key_zb[note >> 5 & 3u] >> (note & 31u) & 1u) ? 2u : 1u;
 }
 static UI_LATE void key_send(uint32_t st, uint32_t note, uint32_t v);
@@ -5582,15 +5840,11 @@ static UI_LATE void key_out(uint32_t st, uint32_t note, uint32_t v)   /* a key's
     else ev_put(d & 1u ? EV_KEY_A : EV_KEY_B, note, st == 0x80u ? 0u : v);   /* (the part not sequenced alone) */
     key_send(st, note, v);
 }
-static UI_LATE void key_send(uint32_t st, uint32_t note, uint32_t v)   /* a key's note out over MIDI: on OUT CHANNEL;
-                                          * CHANNELS with part B edited: on B CHANNEL (none set: OUT CHANNEL), as SEQ
-                                          * B's notes (sq_emit) */
+static UI_LATE void key_send(uint32_t st, uint32_t note, uint32_t v)   /* a key's note out over MIDI on its part's
+                                          * OUT (1.19.4): part B's alone (SPLIT's B zone, CHANNELS with part B edited)
+                                          * on B's, the rest (LAYER's both too: sent once) on A's */
 {
-    if (set.mx_mode == SY_M_CHANNELS && ed_part && set.mx_chb) {
-        const uint32_t to = midi_to(), s = (st & 0xF0u) | ((set.mx_chb - 1u) & 15u);
-        if (to) plat_midi_send(s >> 4 | s << 8 | note << 16 | v << 24, to);
-    } else
-        midi_send_ch(st, note, v);
+    midi_send_p(sq_parts_key(note) == 2u, st, note, v);
 }
 static UI_LATE void note_off_out(uint32_t note) { key_out(0x80u, note, 0); }   /* (its parts' sequencers run: it did not sound
                                           * there, nothing to end) */
@@ -6275,6 +6529,7 @@ enum { G_NONE, G_TR, G_MIDI, G_BT, G_AUDIO, G_BACK, G_CH, G_THRU, G_CLK, G_PANIC
        G_OCH, G_OTO, G_CSRC, G_KIT, G_ENG, G_ASAVE, G_RVQ,
        G_SEQ, G_SPARP, G_SKLAT, G_SRQ, G_SBASE, G_SBASEB,   /* (1.14: GLO > SEQ, the arp patterns' defaults as one is
                                           * cleared or never saved, set.sq_def; the BASE NOTE(s), the page's SELECT's) */
+       G_SDOUT,                          /* (1.19.3: GLO > SEQ > DRUM OUT, set.sq_def's SQ_DOUT: its bit's place) */
        G_SPCNT,                          /* (1.18C40: GLO > SEQ > PRECOUNT, both sequencers' RECORD: OFF, 1 BAR, 2 BARS) */
 #ifdef HYB_MULTI
        G_MULTI, G_MMODE, G_MEDIT, G_MSPLIT, G_MCHB, G_MVOI, G_MSEND,   /* (the USB build's MULTI page) */
@@ -6287,13 +6542,16 @@ enum { G_NONE, G_TR, G_MIDI, G_BT, G_AUDIO, G_BACK, G_CH, G_THRU, G_CLK, G_PANIC
        G_VK0, G_VK1, G_VK2, G_VK3, G_VK4, G_VK5, G_VK6, G_VNORM, G_VRST, G_VSKIP,   /* (its CALIBRATE page: the top
                                           * row's keys; G_VNORM: CHECK) */
         G_DRCH,                           /* (1.18C31: MIDI's DRUM CHANNEL, set.dr_ch) */
+       G_BOUT, G_ACH, G_BCH, G_CLKO,     /* (1.19.4: B CHANNEL > OUT; MIDI's A CHANNEL, B CHANNEL (their pages: IN, G_CH /
+                                          * G_MCHB, and OUT, G_OCH / G_BOUT), CLK OFFSET) */
+       G_CLKL,                           /* (1.19.5: MIDI's CLK LOCK, ON / OFF) */
 #elif FM1B_BLE
        G_UNI, G_UNIM, G_UAUTO, G_STEAL,  /* (AUDIO's unison settings, in md_pad) */
 #endif
        G_N };
 enum { GP_TOP, GP_MIDI, GP_BT, GP_AUDIO, GP_ABOUT, GP_IN, GP_OUT, GP_CLK,
 #ifdef HYB_MULTI
-       GP_MULTI,
+       GP_MULTI, GP_ACH, GP_BCH,         /* (1.19.4: A CHANNEL's and B CHANNEL's IN and OUT) */
 #endif
        GP_SEQ,
 #ifdef HYB_VELO
@@ -6301,30 +6559,36 @@ enum { GP_TOP, GP_MIDI, GP_BT, GP_AUDIO, GP_ABOUT, GP_IN, GP_OUT, GP_CLK,
 #endif
        GP_N };
 _Static_assert(SQ_PARP == 1u << (G_SPARP - G_SPARP) && SQ_NLAT == 1u << (G_SKLAT - G_SPARP)
-               && SQ_NRQ == 1u << (G_SRQ - G_SPARP), "GLO > SEQ: the pad's bits in their order");
+               && SQ_NRQ == 1u << (G_SRQ - G_SPARP) && SQ_DOUT == 1u << (G_SDOUT - G_SPARP),
+               "GLO > SEQ: the pad's bits in their order (DRUM OUT's too)");
 #ifdef HYB_VELO
 #define GLO_PMAX 13u                     /* a page's lines at most (1.18C48: AUDIO's 13) */
 #else
 #define GLO_PMAX 11u
 #endif
 #if FM1B_BLE && defined(HYB_MULTI)       /* the Bluetooth build with two parts: the Bluetooth build's
-                                          * pages, MULTI after TRANSPOSE and AUDIO's voice settings as the USB build's */
-static const uint8_t GLO_PAGE[GP_N][GLO_PMAX] = {{G_TR, G_MULTI, G_MIDI, G_BT, G_AUDIO, G_KEYL, G_VELO, G_ASAVE, G_SEQ,
-                                                  G_KIT, G_ABOUT, G_BACK},
-                                                 {G_CH, G_DRCH, G_INP, G_OUT, G_CLKP, G_THRU, G_VCC, G_CC, G_PANIC,
-                                                  G_BACK},
+                                          * pages, VELOCITY and MULTI after TRANSPOSE and AUDIO's voice settings as the
+                                          * USB build's. 1.19.1 (a player's report): VELOCITY under TRANSPOSE, KEY
+                                          * LIGHTS and AUTO SAVE above ABOUT; part B's channel (B CHANNEL) under MIDI
+                                          * after CHANNEL, no longer on MULTI (1.19.1, 1.19.2: dimmed and fixed in
+                                          * SINGLE; 1.19.3: SEQ B's channel there too, never dimmed). Nothing stored follows a line's place (ui.gpos is not saved) */
+static const uint8_t GLO_PAGE[GP_N][GLO_PMAX] = {{G_TR, G_VELO, G_MULTI, G_MIDI, G_BT, G_AUDIO, G_SEQ, G_KIT, G_KEYL,
+                                                  G_ASAVE, G_ABOUT, G_BACK},
+                                                 {G_ACH, G_BCH, G_DRCH, G_INP, G_OUT, G_CLKP, G_CLKO, G_CLKL, G_THRU,
+                                                  G_VCC, G_CC, G_PANIC, G_BACK},
                                                  {G_BLE, G_SEARCH, G_FORGET, G_AUTO, G_BACK},
                                                  {G_LAT, G_MAXV, G_UNI, G_UNIL, G_UNIM, G_UAUTO, G_STEAL, G_VOL, G_ENG,
                                                   G_RVQ, G_OSC, G_FLT, G_BACK},
                                                  {G_VER, G_BY, G_KOFI, G_DIAG, G_BACK}, {G_IUSB, G_ITRS, G_IBT, G_BACK},
-                                                 {G_OCH, G_OTO, G_BACK}, {G_CLK, G_CSRC, G_BACK},
-                                                 {G_MMODE, G_MEDIT, G_MSPLIT, G_MCHB, G_MDYN, G_MVOI, G_MSEND, G_MVCA,
-                                                  G_MVCB, G_BACK},
-                                                 {G_SPARP, G_SKLAT, G_SRQ, G_SPCNT, G_SBASE, G_SBASEB, G_BACK},
+                                                 {G_OTO, G_BACK}, {G_CLK, G_CSRC, G_BACK},
+                                                 {G_MMODE, G_MEDIT, G_MSPLIT, G_MDYN, G_MVOI, G_MSEND, G_MVCA, G_MVCB,
+                                                  G_BACK},
+                                                 {G_CH, G_OCH, G_BACK}, {G_MCHB, G_BOUT, G_BACK},
+                                                 {G_SPARP, G_SKLAT, G_SRQ, G_SPCNT, G_SBASE, G_SBASEB, G_SDOUT, G_BACK},
                                                  {G_VON, G_VFIX, G_VCRV, G_VSENS, G_VDRUM, G_VCAL, G_BACK},
                                                  {G_VK0, G_VK1, G_VK2, G_VK3, G_VK4, G_VK5, G_VK6, G_VSKIP, G_VNORM,
                                                   G_VRST, G_BACK}};
-static const uint8_t GLO_PN[GP_N] = {12, 10, 5, 13, 5, 4, 3, 3, 10, 7, 7, 11};
+static const uint8_t GLO_PN[GP_N] = {12, 13, 5, 13, 5, 4, 2, 3, 9, 3, 3, 8, 7, 11};
 #elif FM1B_BLE
 static const uint8_t GLO_PAGE[GP_N][GLO_PMAX] = {{G_TR, G_MIDI, G_BT, G_AUDIO, G_KEYL, G_ASAVE, G_SEQ, G_KIT, G_ABOUT,
                                                   G_BACK},
@@ -6336,23 +6600,25 @@ static const uint8_t GLO_PAGE[GP_N][GLO_PMAX] = {{G_TR, G_MIDI, G_BT, G_AUDIO, G
                                                  {G_SPARP, G_SKLAT, G_SRQ, G_SPCNT, G_SBASE, G_BACK}};
 static const uint8_t GLO_PN[GP_N] = {10, 9, 5, 9, 5, 4, 3, 3, 6};   /* (AUDIO: USB audio on / off left out, the platform has
                                           * no way to refuse the USB audio stream while it runs) */
-#elif defined(HYB_MULTI)   /* the USB build with two parts: MULTI after TRANSPOSE, its page */
-static const uint8_t GLO_PAGE[GP_N][GLO_PMAX] = {{G_TR, G_MULTI, G_MIDI, G_AUDIO, G_KEYL, G_VELO, G_ASAVE, G_SEQ, G_KIT,
+#elif defined(HYB_MULTI)   /* the USB build with two parts: VELOCITY and MULTI after TRANSPOSE, its
+                                          * page (1.19.1: the order and B CHANNEL as the Bluetooth build's) */
+static const uint8_t GLO_PAGE[GP_N][GLO_PMAX] = {{G_TR, G_VELO, G_MULTI, G_MIDI, G_AUDIO, G_SEQ, G_KIT, G_KEYL, G_ASAVE,
                                                   G_ABOUT, G_BACK},
-                                                 {G_CH, G_DRCH, G_INP, G_OUT, G_CLKP, G_THRU, G_VCC, G_CC, G_PANIC,
-                                                  G_BACK},
+                                                 {G_ACH, G_BCH, G_DRCH, G_INP, G_OUT, G_CLKP, G_CLKO, G_CLKL, G_THRU,
+                                                  G_VCC, G_CC, G_PANIC, G_BACK},
                                                  {G_BACK},
                                                  {G_LAT, G_MAXV, G_UNI, G_UNIL, G_UNIM, G_UAUTO, G_STEAL, G_VOL, G_ENG,
                                                   G_RVQ, G_OSC, G_FLT, G_BACK},
                                                  {G_VER, G_BY, G_KOFI, G_DIAG, G_BACK}, {G_IUSB, G_ITRS, G_BACK},
-                                                 {G_OCH, G_OTO, G_BACK}, {G_CLK, G_CSRC, G_BACK},
-                                                 {G_MMODE, G_MEDIT, G_MSPLIT, G_MCHB, G_MDYN, G_MVOI, G_MSEND, G_MVCA,
-                                                  G_MVCB, G_BACK},
-                                                 {G_SPARP, G_SKLAT, G_SRQ, G_SPCNT, G_SBASE, G_SBASEB, G_BACK},
+                                                 {G_OTO, G_BACK}, {G_CLK, G_CSRC, G_BACK},
+                                                 {G_MMODE, G_MEDIT, G_MSPLIT, G_MDYN, G_MVOI, G_MSEND, G_MVCA, G_MVCB,
+                                                  G_BACK},
+                                                 {G_CH, G_OCH, G_BACK}, {G_MCHB, G_BOUT, G_BACK},
+                                                 {G_SPARP, G_SKLAT, G_SRQ, G_SPCNT, G_SBASE, G_SBASEB, G_SDOUT, G_BACK},
                                                  {G_VON, G_VFIX, G_VCRV, G_VSENS, G_VDRUM, G_VCAL, G_BACK},
                                                  {G_VK0, G_VK1, G_VK2, G_VK3, G_VK4, G_VK5, G_VK6, G_VSKIP, G_VNORM,
                                                   G_VRST, G_BACK}};
-static const uint8_t GLO_PN[GP_N] = {11, 10, 1, 13, 5, 3, 3, 3, 10, 7, 7, 11};
+static const uint8_t GLO_PN[GP_N] = {11, 13, 1, 13, 5, 3, 2, 3, 9, 3, 3, 8, 7, 11};
 #else   /* the USB build (no Bluetooth): no BLUETOOTH page (GP_BT stays, out of reach), no BT port in */
 static const uint8_t GLO_PAGE[GP_N][GLO_PMAX] = {{G_TR, G_MIDI, G_AUDIO, G_KEYL, G_ASAVE, G_SEQ, G_KIT, G_ABOUT, G_BACK},
                                                  {G_CH, G_INP, G_OUT, G_CLKP, G_THRU, G_VCC, G_CC, G_PANIC, G_BACK},
@@ -6363,12 +6629,12 @@ static const uint8_t GLO_PAGE[GP_N][GLO_PMAX] = {{G_TR, G_MIDI, G_AUDIO, G_KEYL,
 static const uint8_t GLO_PN[GP_N] = {9, 9, 1, 5, 5, 3, 3, 3, 6};
 #endif
 #ifdef HYB_MULTI
-static const uint8_t GLO_OPEN[GP_N] = {G_NONE, G_MIDI, G_BT, G_AUDIO, G_ABOUT, G_INP, G_OUT, G_CLKP, G_MULTI, G_SEQ,
-                                       G_VELO, G_VCAL};
-static const uint8_t GLO_UP[GP_N] = {GP_TOP, GP_TOP, GP_TOP, GP_TOP, GP_TOP, GP_MIDI, GP_MIDI, GP_MIDI, GP_TOP, GP_TOP,
-                                     GP_TOP, GP_VELO};
+static const uint8_t GLO_OPEN[GP_N] = {G_NONE, G_MIDI, G_BT, G_AUDIO, G_ABOUT, G_INP, G_OUT, G_CLKP, G_MULTI, G_ACH,
+                                       G_BCH, G_SEQ, G_VELO, G_VCAL};
+static const uint8_t GLO_UP[GP_N] = {GP_TOP, GP_TOP, GP_TOP, GP_TOP, GP_TOP, GP_MIDI, GP_MIDI, GP_MIDI, GP_TOP, GP_MIDI,
+                                     GP_MIDI, GP_TOP, GP_TOP, GP_VELO};
 static const char *const GLO_TITLE[GP_N] = {"GLOBAL", "MIDI", "BLUETOOTH", "AUDIO", "ABOUT", "MIDI IN", "MIDI OUT",
-                                            "CLOCK", "MULTI", "SEQ", "VELOCITY", "CALIBRATE"};
+                                            "CLOCK", "MULTI", "A CHANNEL", "B CHANNEL", "SEQ", "VELOCITY", "CALIBRATE"};
 #else
 static const uint8_t GLO_OPEN[GP_N] = {G_NONE, G_MIDI, G_BT, G_AUDIO, G_ABOUT, G_INP, G_OUT, G_CLKP, G_SEQ};   /* the
                                           * line that opens a page */
@@ -6377,26 +6643,34 @@ static const uint8_t GLO_UP[GP_N] = {GP_TOP, GP_TOP, GP_TOP, GP_TOP, GP_TOP, GP_
 static const char *const GLO_TITLE[GP_N] = {"GLOBAL", "MIDI", "BLUETOOTH", "AUDIO", "ABOUT", "MIDI IN", "MIDI OUT",
                                             "CLOCK", "SEQ"};   /* (short: the strip has the line's value beside it) */
 #endif
-static const char *const G_NAME[G_N] = {"", "TRANSPOSE", "MIDI", "BLUETOOTH", "AUDIO", "BACK", "CHANNEL", "THRU",
+#ifdef HYB_MULTI
+#define G_CH_NAME "IN"                   /* (1.19.4: A CHANNEL's page: IN (the channel listened to), OUT (OUT CHANNEL's)) */
+#define G_OCH_NAME "OUT"
+#else
+#define G_CH_NAME "CHANNEL"
+#define G_OCH_NAME "CHANNEL"
+#endif
+static const char *const G_NAME[G_N] = {"", "TRANSPOSE", "MIDI", "BLUETOOTH", "AUDIO", "BACK", G_CH_NAME, "THRU",
                                         "MODE", "PANIC", "BLUETOOTH", "SEARCH", "FORGET", "AUTO CONNECT", "LATENCY",
                                         "MIDI CC", "KEY LIGHTS", "ABOUT", APP_NAME " " HYB_VERSION HYB_RVTAG HYB_EDITION,
                                         "BY J0KERPACK", "KO-FI.COM/J0KERPACK", "DIAGNOSIS", "SYNTH VOL", "CC 7", "IN PORTS", "OUT",
-                                        "CLOCK", "USB", "TRS", "BLUETOOTH", "CHANNEL", "PORTS", "SOURCE", "DRUM KIT",
+                                        "CLOCK", "USB", "TRS", "BLUETOOTH", G_OCH_NAME, "PORTS", "SOURCE", "DRUM KIT",
                                         "ENGINE", "AUTO SAVE", "REVERB",
 #ifdef HYB_MULTI
-                                        "SEQ", "PATCH ARP", "KEY LATCH", "REC QUANT", "BASE A", "BASE B",
+                                        "SEQ", "PATCH ARP", "KEY LATCH", "REC QUANT", "BASE A", "BASE B", "DRUM OUT",
 #else
-                                        "SEQ", "PATCH ARP", "KEY LATCH", "REC QUANT", "BASE NOTE", "",
+                                        "SEQ", "PATCH ARP", "KEY LATCH", "REC QUANT", "BASE NOTE", "", "",
 #endif
                                         "PRECOUNT",
 #ifdef HYB_MULTI
-                                        "MULTI", "MODE", "EDIT", "SPLIT", "B CHANNEL", "VOICES", "B SEND",
+                                        "MULTI", "MODE", "EDIT", "SPLIT", "IN", "VOICES", "B SEND",
                                         "ALLOC", "MAX VOICES", "UNI MAX SINGLE", "UNI MAX MULTI", "MONO UNI MAX",
                                         "UNISON AUTO", "STEAL",
                                         "VOL A CC", "VOL B CC", "OSC", "FILT KNOBS",
                                         "VELOCITY", "VELOCITY", "FIXED", "CURVE", "SENSITIVITY", "DRUM ACC", "CALIBRATE",
                                         "C#5", "D5", "D#5", "E5", "F5", "F#5", "G5", "CHECK", "RESET", "SKIP KEY",
-                                        "DRUM CHANNEL",
+                                        "DRUM CHANNEL", "OUT", "A CHANNEL", "B CHANNEL", "CLK OFFSET",
+                                        "CLK LOCK",
 #elif FM1B_BLE
                                         "UNISON MAX", "MONO UNI MAX", "UNISON AUTO", "STEAL",
 #endif
@@ -6721,6 +6995,7 @@ static int glo_save(void)
     s.osc_ok = OSC_V1;                   /* (1.18C22: OSC) */
     s.osc_cl = set.osc_cl;
     s.flt_sm = set.flt_sm;               /* (FILT KNOBS, in OSC's padding) */
+    s.ck_fl = set.ck_fl;                 /* (1.19.5: CLK LOCK, in OSC's padding too) */
     s.ve_ok = VE_V1;                     /* (1.18C26: VELOCITY, CALIBRATE's ends) */
     s.ve_fl = set.ve_fl;
     s.ve_fix = set.ve_fix;
@@ -6729,6 +7004,10 @@ static int glo_save(void)
     for (k = 0; k < VE_NTOP; k++) { s.ve_lo[k] = set.ve_lo[k]; s.ve_hi[k] = set.ve_hi[k]; }
     s.dc_ok = DC_V1;                     /* (1.18C31: DRUM CHANNEL) */
     s.dr_ch = set.dr_ch;
+    s.mo = set.mo;                       /* (1.19.4: the parts' OUT, the new IN values; CLK OFFSET) */
+    s.ck_ofs = set.ck_ofs;
+    s.pc_ok = PC_V1;                     /* (1.19.2: PLAY mode's CCs) */
+    for (k = 0; k < 7u; k++) s.pm_cc[k] = set.pm_cc[k];
 #endif
     return store_save(OBJ_SETTINGS, &s, sizeof s);
 }
@@ -6764,6 +7043,9 @@ static void glo_panic(void)              /* all notes off: the keys' and HOLD's 
     ev_put(0xB0u, 123u, 0u);             /* (the engine: sy_all_off, the arpeggiator's keys too) */
     ev_put(0xB0u, 120u, 0u);
     midi_send_ch(0xB0u, 123u, 0);
+#ifdef HYB_MULTI
+    midi_send_p(1u, 0xB0u, 123u, 0);     /* (1.19.4: part B's OUT too) */
+#endif
     app_say("Panic", "ALL NOTES OFF");
 }
 
@@ -6799,7 +7081,9 @@ static UI_LATE uint32_t gv_n(uint32_t g)
     if (g == G_MMODE) return SY_M_N;
     if (g == G_MEDIT) return 2u;
     if (g == G_MSPLIT) return 128u;
-    if (g == G_MCHB || g == G_DRCH) return 17u;   /* (OFF, 1 .. 16) */
+    if (g == G_CH || g == G_MCHB) return 18u;   /* (1.19.4: the INs, OFF, OMNI, 1 .. 16) */
+    if (g == G_DRCH || g == G_OCH || g == G_BOUT) return 17u;   /* (OFF, 1 .. 16) */
+    if (g == G_CLKO) return 2u * CK_OFS_MAX + 1u;   /* (-50 .. +50 ms) */
     if (g == G_MVOI) return SY_MAX_VOICES - 1u;   /* (part A's 1 .. 15) */
     if (g == G_MSEND) return MX_SEND_PATCH + 1u;   /* (PATCH, 0 .. 127) */
     if (g == G_MDYN || g == G_UAUTO || g == G_STEAL) return 2u;
@@ -6837,7 +7121,11 @@ static UI_LATE uint32_t gv_get(uint32_t g)
     if (g == G_VSENS) return (uint32_t)(set.ve_sens + VE_SENS_MAX);
     if (g == G_MEDIT) return ed_part;
     if (g == G_MSPLIT) return set.mx_split;
-    if (g == G_MCHB) return set.mx_chb;
+    if (g == G_CH) return set.mo & MO_AINOFF ? 0u : set.midi_ch + 1u;   /* (1.19.4: OFF, OMNI, 1 .. 16) */
+    if (g == G_MCHB) return set.mo & MO_BOMNI ? 1u : set.mx_chb ? set.mx_chb + 1u : 0u;
+    if (g == G_OCH) return set.mo & MO_AOFF ? 0u : set.out_ch + 1u;   /* (OFF, 1 .. 16) */
+    if (g == G_BOUT) return (set.mo & MO_B) - 1u;
+    if (g == G_CLKO) return (uint32_t)(set.ck_ofs + CK_OFS_MAX);
     if (g == G_DRCH) return set.dr_ch;
     if (g == G_MVOI) return set.mx_nva - 1u;
     if (g == G_MSEND) return set.mx_send >= MX_SEND_PATCH ? 0u : set.mx_send + 1u;
@@ -6953,6 +7241,30 @@ static UI_LATE void gv_set(uint32_t g, uint32_t i)
         glo_touch();
         return;
     }
+    if (g == G_CH) {                     /* (1.19.4) A CHANNEL > IN: OFF (MO_AINOFF, midi_ch 0), OMNI, 1 .. 16; the
+                                          * notes of the channel left: off, their note-offs no longer come */
+        set.midi_ch = (uint8_t)(i > 1u ? i - 1u : 0u);
+        set.mo = (uint8_t)((set.mo & ~MO_AINOFF) | (i ? 0u : MO_AINOFF));
+        ev_put(0xB0u, 123u, 0u);
+        glo_touch();
+        return;
+    }
+    if (g == G_OCH || g == G_BOUT) {     /* (1.19.4) A CHANNEL > OUT, B CHANNEL > OUT: OFF, 1 .. 16; all notes off on
+                                          * the channel left (its notes' offs go elsewhere now) */
+        midi_send_p(g == G_BOUT, 0xB0u, 123u, 0);
+        if (g == G_BOUT) set.mo = (uint8_t)((set.mo & ~MO_B) | (i + 1u));
+        else {
+            set.mo = (uint8_t)((set.mo & ~MO_AOFF) | (i ? 0u : MO_AOFF));
+            if (i) set.out_ch = (uint8_t)(i - 1u);
+        }
+        glo_touch();
+        return;
+    }
+    if (g == G_CLKO) {                   /* (1.19.4) CLK OFFSET: ck_shift takes it at its next block */
+        set.ck_ofs = (int8_t)((int32_t)i - CK_OFS_MAX);
+        glo_touch();
+        return;
+    }
     if (g == G_DRCH) {                   /* DRUM CHANNEL (1.18C31): its notes the drums' from the next one in; the notes
                                           * of the channel now taken: off (their note-offs no longer reach the parts) */
         set.dr_ch = (uint8_t)(i > 16u ? 0u : i);
@@ -6966,18 +7278,16 @@ static UI_LATE void gv_set(uint32_t g, uint32_t i)
             all_off_both();             /* (the keys' and HOLD's: the voices change hands) */
             set.mx_mode = (uint8_t)(i < SY_M_N ? i : SY_M_SINGLE);
             if (set.mx_mode == SY_M_LAYER) hold_o = hold_on;   /* (1.16: LAYER's one HOLD: the part edited's) */
-            if (set.mx_mode == SY_M_SINGLE) {   /* (SINGLE: part A alone, edited; SEQ B off, SEQ A shown) */
-                part_edit(0);
-                sq_on_i(1, 0);
-                if (sq_mi) sq_show(0);
-            }
+            if (set.mx_mode == SY_M_SINGLE) part_edit(0);   /* (SINGLE: part A alone, edited. 1.19.3: SEQ B
+                                          * runs on, MIDI only; the voices are new, multi_setup) */
             home_sig[0] = home_sig[1] = 0;
             ui.d_lcd = 1;
         } else if (g == G_MSPLIT) set.mx_split = (uint8_t)(i & 127u);
         else if (g == G_MCHB) {
             if (!ed_part) hold_park_end();   /* (1.15: B's held notes out on the channel left: off) */
             ev_put(0xB0u | (set.mx_chb ? set.mx_chb - 1u : 0u), 123u, 0u);   /* (B's notes on the channel left: off) */
-            set.mx_chb = (uint8_t)(i > 16u ? 0u : i);
+            set.mx_chb = (uint8_t)(i > 1u ? i - 1u : 0u);   /* (1.19.4: OFF, OMNI (MO_BOMNI, mx_chb 0), 1 .. 16) */
+            set.mo = (uint8_t)((set.mo & ~MO_BOMNI) | (i == 1u ? MO_BOMNI : 0u));
         } else if (g == G_MVOI && i + 1u != set.mx_nva) {
             all_off_both();
             set.mx_nva = (uint8_t)(i + 1u);
@@ -7048,7 +7358,12 @@ static UI_LATE void gv_text(uint32_t g, uint32_t i, char *t)
     if (g == G_MMODE) { text_cat(t, MX_NAME[i < SY_M_N ? i : 0u]); return; }
     if (g == G_MEDIT) { text_cat(t, i ? "PART B" : "PART A"); return; }
     if (g == G_MSPLIT) { text_cat(t, "B < "); note_text(i, t); return; }
-    if (g == G_MCHB || g == G_DRCH) { if (i) put_sint(t, (int32_t)i, 0); else text_cat(t, "OFF"); return; }
+    if (g == G_CH || g == G_MCHB) {      /* (1.19.4: the INs, OFF, OMNI, 1 .. 16) */
+        if (i > 1u) put_sint(t, (int32_t)i - 1, 0); else text_cat(t, i ? "OMNI" : "OFF");
+        return;
+    }
+    if (g == G_DRCH || g == G_OCH || g == G_BOUT) { if (i) put_sint(t, (int32_t)i, 0); else text_cat(t, "OFF"); return; }
+    if (g == G_CLKO) { put_sint(t, (int32_t)i - CK_OFS_MAX, i != CK_OFS_MAX); text_cat(t, " MS"); return; }
     if (g == G_MVOI) {                   /* ("A 8 B 8") */
         text_cat(t, "A "); put_sint(t + text_len(t), (int32_t)i + 1, 0);
         text_cat(t, " B "); put_sint(t + text_len(t), SY_MAX_VOICES - 1 - (int32_t)i, 0);
@@ -7091,7 +7406,8 @@ static UI_LATE void gv_text(uint32_t g, uint32_t i, char *t)
 static UI_LATE int glo_value(uint32_t g)         /* a value with its list */
 {
 #ifdef HYB_MULTI
-    if ((g >= G_MMODE && g <= G_MVCB) || g == G_OSC || g == G_FLT || g == G_VFIX || g == G_VCRV || g == G_VSENS || g == G_DRCH)
+    if ((g >= G_MMODE && g <= G_MVCB) || g == G_OSC || g == G_FLT || g == G_VFIX || g == G_VCRV || g == G_VSENS || g == G_DRCH
+        || g == G_BOUT || g == G_CLKO)
         return 1;
 #elif FM1B_BLE
     if (g >= G_UNI && g <= G_STEAL) return 1;
@@ -7119,6 +7435,12 @@ static UI_LATE void glo_val(uint32_t g, char *v)   /* a line's value ("" none) *
     }
 #ifdef HYB_MULTI
     if (g == G_MULTI) { text_cat(v, MX_NAME[set.mx_mode < SY_M_N ? set.mx_mode : 0u]); return; }   /* (its page's summary) */
+    if (g == G_ACH || g == G_BCH) {      /* (1.19.4: "OMNI>1": IN > OUT) */
+        gv_text(g == G_ACH ? G_CH : G_MCHB, gv_get(g == G_ACH ? G_CH : G_MCHB), v);
+        text_cat(v, ">");
+        gv_text(g == G_ACH ? G_OCH : G_BOUT, gv_get(g == G_ACH ? G_OCH : G_BOUT), v + text_len(v));
+        return;
+    }
 #endif
 #ifdef HYB_VELO
     if (g == G_VELO) {                   /* (its page's summary: "NORMAL", "HARD +2", "OFF 100") */
@@ -7143,13 +7465,16 @@ static UI_LATE void glo_val(uint32_t g, char *v)   /* a line's value ("" none) *
         text_cat(v, set.key_dark == KL_NIGHT ? "NIGHT" : set.key_dark ? "OFF" : "ON");
     else if (g == G_ASAVE)
         text_cat(v, set.md_pad & MD_AUTO ? "ON" : "OFF");
-    else if (g >= G_SPARP && g <= G_SRQ) /* (GLO > SEQ's defaults, 1.14) */
+    else if ((g >= G_SPARP && g <= G_SRQ) || g == G_SDOUT) /* (GLO > SEQ's defaults, 1.14; DRUM OUT, 1.19.3) */
         text_cat(v, SQ_FON(set.sq_def, 1u << (g - G_SPARP)) ? "ON" : "OFF");
     else if (g == G_VCC)
         text_cat(v, set.vol_cc ? "SYNTH VOL" : "PART VOL");
 #ifdef HYB_RV_LEND
     else if (g == G_BLE && bt_lent && !set.ble_off)
         text_cat(v, "RESTART");          /* (on at the next power-on: the reverb has its memory now) */
+#endif
+#ifdef HYB_MULTI
+    else if (g == G_CLKL) text_cat(v, set.ck_fl & CK_FL_UNLOCK ? "OFF" : "ON");
 #endif
     else if (g == G_THRU || g == G_AUTO || g == G_BLE)
         text_cat(v, (g == G_THRU ? set.thru : g == G_AUTO ? set.ble_auto : !set.ble_off) ? "ON" : "OFF");
@@ -7163,12 +7488,16 @@ static UI_LATE void glo_val(uint32_t g, char *v)   /* a line's value ("" none) *
         if (!in_off_eff()) { v[0] = 0; text_cat(v, "ALL"); }
         else if (!v[0]) text_cat(v, "NONE");
     } else if (g == G_OUT) {
+#ifdef HYB_MULTI
+        text_cat(v, OP_NAME[out_to_eff() & 3u]);   /* (1.19.4: the ports alone, the channels A's and B's) */
+#else
         if (out_to_eff() == OP_OFF) text_cat(v, "OFF");
         else {                           /* ("10 USB+BT": the channel, the ports; no "CH", the line's room) */
             put_sint(v, set.out_ch + 1, 0);
             text_cat(v, " ");
             text_cat(v, OP_NAME[out_to_eff() & 3u]);
         }
+#endif
     } else if (g == G_CLKP) {            /* ("EXT TRS": a source other than ANY, short) */
         if (set.clk == CLK_EXT && clk_src_eff() != CS_ANY) { text_cat(v, "EXT "); text_cat(v, CS_NAME[clk_src_eff() & 3u]); }
         else text_cat(v, CLK_NAME[set.clk < CLK_N ? set.clk : 0u]);
@@ -7284,7 +7613,7 @@ static void cc_item(uint32_t i, char *t, char *pre, uint32_t *fl)
 static void glo_item(uint32_t i, char *t, char *pre, uint32_t *fl)
 {
     const uint32_t g = GLO_PAGE[ui.gpage][i];
-    (void)pre; (void)fl;
+    (void)pre;
     text_cat(t, G_NAME[g]);
     if (g != G_BACK && !(g >= G_MIDI && g <= G_AUDIO) && g != G_PANIC && g != G_CC && !(g >= G_ABOUT && g <= G_DIAG)
         && g != G_KIT) {                 /* (the
@@ -7375,11 +7704,17 @@ static UI_LATE void glo_rec(void)                /* REC on the cursor's line */
     } else if (g == G_THRU) {
         set.thru = (uint8_t)!set.thru;
         glo_touch();
+#ifdef HYB_MULTI
+    } else if (g == G_CLKL) {            /* (1.19.5) CLK LOCK: ck_lock takes it at its next block */
+        set.ck_fl ^= CK_FL_UNLOCK;
+        glo_touch();
+#endif
     } else if (g == G_KEYL) {
         set.key_dark = (uint8_t)(set.key_dark == KL_ON ? KL_NIGHT : set.key_dark == KL_NIGHT ? KL_OFF : KL_ON);   /* (ON,
                                           * NIGHT, OFF: 1.18C43) */
         glo_touch();
-    } else if (g >= G_SPARP && g <= G_SRQ) {   /* (GLO > SEQ's defaults, 1.14: no pattern saved changes) */
+    } else if ((g >= G_SPARP && g <= G_SRQ) || g == G_SDOUT) {   /* (GLO > SEQ's defaults, 1.14: no pattern saved
+                                          * changes; 1.19.3: DRUM OUT, no pattern's) */
         set.sq_def ^= (uint8_t)(1u << (g - G_SPARP));
         sq_def_sync();
         glo_touch();
@@ -8002,6 +8337,13 @@ static UI_LATE int play_on(void) { return ui.view == V_PLAY || ui.view == V_PLAY
 #define PM_HOLD_MS 500u                  /* PLAY held this long: PLAY mode on / off (as SHIFT's OCT- hold) */
 static uint8_t pm_on PLAT_POOL;          /* PLAY mode on (1.18C43: the HOME screen while on) */
 static uint32_t pm_t PLAT_POOL;          /* PLAY down since (odd), 2 its hold taken, 0 up */
+#ifdef HYB_MULTI
+static uint8_t pm_learn PLAT_POOL;       /* (1.19.2) the assignment editor's LEARN armed: its control + 1 (0 none) */
+static uint8_t in_shift PLAT_POOL;       /* (SHIFT down at this frame's buttons: input) */
+#define PM_LEARN_OFF() (pm_learn = 0)
+#else
+#define PM_LEARN_OFF() ((void)0)
+#endif
 static UI_LATE void play_go(int fresh)           /* PLAY mode's screen (fresh: it starts, the smart choice taken) */
 {
     if (fresh) play_smart();
@@ -8049,6 +8391,15 @@ static UI_LATE uint32_t pm_sel(uint32_t code)    /* an assignment's place in the
 }
 static UI_LATE void played_rec(void)             /* REC: a control's choices open; the one chosen taken; BACK */
 {
+#ifdef HYB_MULTI
+    if (!ui.pch && ui.pcur < PC_N && in_shift) {   /* (1.19.2) SHIFT + REC on a control: LEARN armed (again: off); the
+                                          * next MIDI CC taken for it (pmcc_run) */
+        pm_learn = (uint8_t)(pm_learn ? 0u : ui.pcur + 1u);
+        ui.d_rows = ui.d_lcd = 1;
+        return;
+    }
+#endif
+    PM_LEARN_OFF();
     if (!ui.pch && ui.pcur >= PC_N) {    /* BACK: PLAY mode */
         play_go(0);
         return;
@@ -8071,6 +8422,13 @@ static UI_LATE void played_rec(void)             /* REC: a control's choices ope
 }
 static UI_LATE void played_home(void)            /* HOME: the choices closed (the assignment as it was); the editor to PLAY mode */
 {
+#ifdef HYB_MULTI
+    if (pm_learn) {                      /* (1.19.2: LEARN armed: off, the editor stays) */
+        pm_learn = 0;
+        ui.d_rows = ui.d_lcd = 1;
+        return;
+    }
+#endif
     if (ui.pch) {
         ui.pch = 0;
         ui.d_rows = ui.d_lcd = 1;
@@ -8080,6 +8438,7 @@ static UI_LATE void played_home(void)            /* HOME: the choices closed (th
 static UI_LATE void played_select(int32_t e)     /* SELECT (K1 too) */
 {
     pl_build();
+    PM_LEARN_OFF();
     if (ui.pch) ui.psel = (uint16_t)clamp((int32_t)ui.psel + e, 0, (int32_t)pl_n + 1);
     else ui.pcur = (uint8_t)clamp((int32_t)ui.pcur + e, 0, (int32_t)PC_N);
     ui.d_rows = ui.d_lcd = 1;
@@ -8092,7 +8451,64 @@ static UI_LATE void pe_item(uint32_t i, char *t, char *pre, uint32_t *fl)   /* t
     text_cat(t, "  ");
     if (pv.smart[i]) text_cat(t, "SMART ");
     if (pv.p[i]) p_name(pv.p[i], t);
+#ifdef HYB_MULTI
+    if (pm_learn == i + 1u) text_cat(t, " CC?");   /* (1.19.2: its MIDI CC, LEARN armed: "?"; none: nothing) */
+    else if (set.pm_cc[i]) { text_cat(t, " CC"); put_sint(t + text_len(t), (int32_t)set.pm_cc[i] - 1, 0); }
+#endif
 }
+#ifdef HYB_MULTI
+static UI_LATE void played_cc(int32_t e)         /* (1.19.2) K2 in the editor: the control's MIDI CC, OFF / 0 .. 127, the
+                                                  * ones learn never takes skipped (pm_cc_bad) */
+{
+    int32_t v = set.pm_cc[ui.pcur], w, n = e < 0 ? -e : e;
+    if (ui.pch || ui.pcur >= PC_N) return;
+    pm_learn = 0;
+    for (; n; n--) {
+        w = v;
+        do w += e < 0 ? -1 : 1; while (w > 0 && w <= 128 && pm_cc_bad((uint32_t)w - 1u));
+        if (w < 0 || w > 128) break;
+        v = w;
+    }
+    set.pm_cc[ui.pcur] = (uint8_t)v;
+    glo_touch();                         /* (saved with GLO's settings) */
+    ui.d_rows = ui.d_lcd = 1;
+}
+static UI_LATE void pmcc_run(uint32_t now)       /* (1.19.2) main loop: LEARN's controller taken; the controls' CCs in,
+                                                  * each as its control would set its parameter */
+{
+    uint32_t k, q;
+    const u_param_t *p;
+    int sm;
+    if (pm_learn && (ui.view != V_PLAYED || ui.pch)) pm_learn = 0;   /* (the editor left: off) */
+    if (pm_learn && ((q = pmcc_lrn) & 0x80u)) {   /* (taken: the line shows its number) */
+        set.pm_cc[pm_learn - 1u] = (uint8_t)((q & 0x7Fu) + 1u);
+        glo_touch();
+        app_say(PC_NAME[pm_learn - 1u], "CC LEARNED");
+        pm_learn = 0;
+        ui.d_rows = ui.d_lcd = 1;
+    }
+    pmcc_arm = pm_learn != 0;
+    pmcc_lrn = 0;
+    for (k = 0; k < PC_N; k++) {
+        if (!((q = pmcc_v[k]) & 0x80u)) continue;
+        pmcc_v[k] = 0;
+        if ((p = pm_param(k, &sm)) == 0 || p_parta(p)) continue;   /* (part A's effects while B is edited: as the
+                                          * control, nothing) */
+#ifdef HYB_SHIM_LEND
+        if (P_BTOFF(p)) continue;
+#endif
+        q = ((q & 0x7Fu) * p_max(p) + 63u) / 127u;
+        if (q == shadow[p_byte(p)]) continue;
+        edit_set(p_byte(p), q, now);
+        if (ui.view == V_PLAY) {         /* (PLAY mode: shown as the control's turn) */
+            ui.lastp = p;
+            ui.last = (int32_t)k;
+            ui.edit_t = now | 1u;
+        }
+        ui.d_rows = ui.d_lcd = 1;
+    }
+}
+#endif
 static UI_LATE void pc_item(uint32_t i, char *t, char *pre, uint32_t *fl)   /* a control's choices: DEFAULT, SMART (each with
                                                      * what it is now), every parameter */
 {
@@ -8111,8 +8527,21 @@ static UI_LATE void play_lcd(char *a, char *v)   /* the LCD strip: PLAY mode (HO
         text_cat(a, hold_on ? "PLAY HOLD" : "PLAY");
         patch_line(v);
     } else if (!ui.pch) {
+#ifdef HYB_MULTI
+        if (pm_learn) {                  /* (1.19.2: LEARN armed; a control's line: K2 the CC, SHIFT + REC learns it) */
+            text_cat(a, "LEARN: SEND CC");
+            text_cat(v, PC_NAME[pm_learn - 1u]);
+        } else if (ui.pcur < PC_N) {
+            text_cat(a, PC_NAME[ui.pcur]);
+            text_cat(v, "K2 CC, SHIFT+REC LEARN");
+        } else {
+            text_cat(a, "ASSIGN");
+            text_cat(v, "BACK");
+        }
+#else
         text_cat(a, "ASSIGN");
         text_cat(v, ui.pcur < PC_N ? PC_NAME[ui.pcur] : "BACK");
+#endif
     } else {                             /* choosing: the control, the block the parameter is in */
         text_cat(a, PC_NAME[ui.pcur]);
         text_cat(v, ui.psel == 0u ? "DEFAULT" : ui.psel == 1u ? "SMART" : U_ROW[pl_row(pl_tab[ui.psel - 2u])].tag);
@@ -9148,7 +9577,7 @@ static UI_LATE void sq_busy_say(uint32_t now)    /* app_frame (after input): a k
     if (!p) return;
     said_t = now | 1u;
 #ifdef HYB_MULTI
-    if (set.mx_mode != SY_M_SINGLE)
+    if (set.mx_mode != SY_M_SINGLE || p > 1u)
         app_say(p == 3u ? "SEQ A+B" : p == 2u ? "SEQ B" : "SEQ A", "IS PLAYING");
     else
 #endif
@@ -9883,7 +10312,6 @@ static UI_LATE void sq_start(void)               /* on: the keys' notes sounding
     uint32_t k;
     if (sq.run) return;
 #ifdef HYB_MULTI
-    if (sq_mi && set.mx_mode == SY_M_SINGLE) return;   /* (SEQ B: part B plays in the multi modes alone) */
     for (k = 0; k < 128u; k++) {         /* (its part's alone: the other's go on) */
         uint32_t j;
         for (j = 0; j < NKEYS && !((ui.keys >> j & 1u) && ui.held[j] == k); j++)
@@ -9937,12 +10365,9 @@ static UI_LATE void sq_on_i(uint32_t i, int on)  /* SEQ A (0) or B (1) on or off
     sq_mi = m;
 }
 static UI_LATE void sq_stop_all(void) { sq_on_i(0, 0); sq_on_i(1, 0); }
-static UI_LATE int32_t sq_other(void)            /* the pattern the other arp sequencer uses, -1 none (NONE; SEQ B
-                                          * in SINGLE: none, it plays nothing there, sq_bfree) */
+static UI_LATE int32_t sq_other(void)            /* the pattern the other arp sequencer uses, -1 none (NONE; 1.19.3:
+                                          * SEQ B in SINGLE too, its MIDI-only sequencer: 1.18C19 .. 1.19.2 none there) */
 {
-#ifdef HYB_MULTI
-    if (!sq_mi && set.mx_mode == SY_M_SINGLE) return -1;
-#endif
     return sq_mi ? (set.sq_pad & SQ_DISARM ? -1 : (int32_t)set.sq_pat) : (set.sqb_pad & SQ_DISARM ? -1 : (int32_t)set.sqb_pat);
 }
 static UI_LATE int sq_busy(void)                 /* the one shown is NONE and the pattern it keeps the other's: not
@@ -9991,7 +10416,7 @@ static UI_LATE void sq_page(uint32_t i)          /* the arp sequencer's page sho
     sqv.key = sqv.clr = sqv.tt = 0;
     ui.view = V_SEQ;
 #ifdef HYB_MULTI
-    sq_show(set.mx_mode != SY_M_SINGLE ? i : 0u);
+    sq_show(i);
 #else
     (void)i;
     seq_blk_fix();
@@ -10032,14 +10457,15 @@ static UI_LATE void sq_button(int shift)         /* SEQ: the arp sequencer's pag
 #ifdef HYB_MULTI
     else if (ui.view == V_LNCH) {        /* (the launcher: the drums' page; 1.18C21: a part chosen there by its key held, that
                                           * part's sequencer) */
-        if (ln.esel && !ln.epd && set.mx_mode != SY_M_SINGLE) { ln.esel = 0; sqv.first = ed_part; sq_page(ed_part); }
+        if (ln.esel && !ln.epd) { ln.esel = 0; sq_page(sqv.first); }   /* (1.19.3: SINGLE too, SEQ B's MIDI-only
+                                          * page with SYNTH 2's key: ln_esel) */
         else { ln.esel = 0; dr_page(); }
     }
 #endif
     else if (ui.view == V_SEQ) {         /* the drums' page */
 #ifdef HYB_MULTI
-        if (set.mx_mode != SY_M_SINGLE && sq_mi == sqv.first) {   /* (two parts: the other part's arp sequencer
-                                          * first) */
+        if (sq_mi == sqv.first && (SQB_CYC || !SQ_BMO)) {   /* (the other part's arp sequencer first; 1.19.3:
+                                          * SINGLE too, SEQ B MIDI only) */
             sq_show(!sq_mi);
             return;
         }
@@ -10062,7 +10488,7 @@ static UI_LATE void sq_button(int shift)         /* SEQ: the arp sequencer's pag
         }
 #ifdef HYB_MULTI
         if (!sqv.last)                   /* (the way's start: the part edited's first; else the one shown last) */
-            sqv.first = (uint8_t)(set.mx_mode != SY_M_SINGLE ? ed_part : 0u);
+            sqv.first = ed_part;
         sq_page(!sqv.last ? sqv.first : sq_mi);
 #else
         sq_page(0u);
@@ -10148,13 +10574,12 @@ static UI_LATE int sq_qload(uint32_t q, int32_t n)   /* sequencer q's pattern n 
 #ifdef HYB_MULTI
         const uint8_t mi = sq_mi;
         const int32_t o = q ? (set.sq_pad & SQ_DISARM ? -1 : (int32_t)set.sq_pat)
-                            : (set.sqb_pad & SQ_DISARM || set.mx_mode == SY_M_SINGLE ? -1 : (int32_t)set.sqb_pat);   /* (the
-                                          * other's; SEQ B in SINGLE: none, its claim released below, 1.18C19) */
+                            : (set.sqb_pad & SQ_DISARM ? -1 : (int32_t)set.sqb_pat);   /* (the other's) */
         if (n >= 0 && n == o && !(sq_qr[!q] == SQ_QR_NONE || (sq_qr[!q] == SQ_QR_SWAP && sq_qt[!q] != (uint32_t)n + 1u)))
             return 0;                    /* (taken by the other meanwhile; 1.18C10: unless it leaves it at this line, a
                                           * launcher row's exchange) */
         sq_mi = (uint8_t)q;
-        if (n >= 0) { sq_bfree(q, (uint32_t)n); SQ_PATV = (uint8_t)n; sq_load_to(&sqp, (uint32_t)n); un_load(1u + q); }
+        if (n >= 0) { SQ_PATV = (uint8_t)n; sq_load_to(&sqp, (uint32_t)n); un_load(1u + q); }
         sq_mi = mi;
         if (q == mi && ui.view == V_SEQ) seq_blk_fix();
 #else
@@ -10518,9 +10943,14 @@ static UI_LATE void sq_lcd(char *a, char *v)     /* the strip: the parameter tur
     if (d) { text_cat(v, " "); text_cat(v, DR_NAME[sqv.ins]); }
     if (sq_step_title(a)) return;
     if (d) { text_cat(a, sqv.rec ? "DRUM REC" : "DRUM SEQ"); return; }
+#ifdef HYB_MULTI
+    if (sq_mi && SQ_BMO) { text_cat(a, (set.mo & MO_B) < 2u ? "B OUT OFF" : sqv.arec ? "B MIDI REC" : "B MIDI ONLY"); return; }   /* (1.19.3: SEQ B in
+                                          * SINGLE, MIDI out alone) */
+#endif
     text_cat(a, sqv.arec ? "ARP" : "ARP SEQ");
 #ifdef HYB_MULTI
-    if (set.mx_mode != SY_M_SINGLE) text_cat(a, sq_mi ? " B" : " A");   /* (two parts: the one shown) */
+    if (set.mx_mode != SY_M_SINGLE) text_cat(a, sq_mi ? " B" : " A");   /* (two parts: the one shown; SINGLE: SEQ A
+                                          * "ARP SEQ" as before, SEQ B above) */
 #endif
     if (sqv.arec) text_cat(a, " REC");   /* (RECORD on: "ARP REC", "ARP B REC") */
 }
@@ -10800,10 +11230,11 @@ static UI_LATE void sr_note(uint32_t note, uint32_t v)   /* a recorded key's not
 {
 #ifdef HYB_MULTI
     ev_put(sq_mi ? EV_KEY_B : EV_KEY_A, note, v);
+    midi_send_p(sq_mi, v ? 0x90u : 0x80u, note, v);   /* (1.19.4: on the sequencer's part's OUT) */
 #else
     ev_put(v ? 0x90u : 0x80u, note, v);
-#endif
     midi_send_ch(v ? 0x90u : 0x80u, note, v);
+#endif
 }
 static UI_LATE void sr_play(uint32_t k, uint32_t note, uint32_t v)   /* (1.18C31) slot k's note on / off: a key's
                                           * as sr_note; a MIDI note in's on the part alone (not sent out again: thru
@@ -12170,6 +12601,10 @@ static UI_LATE void quick_panic(void)
     ev_put(0xB0u, 120u, 0u);
     midi_send_ch(0xB0u, 123u, 0);
     midi_send_ch(0xB0u, 120u, 0);
+#ifdef HYB_MULTI
+    midi_send_p(1u, 0xB0u, 123u, 0);     /* (1.19.4: part B's OUT too) */
+    midi_send_p(1u, 0xB0u, 120u, 0);
+#endif
     if (set.clk == CLK_MASTER && midi_to() && !ck.mrun)   /* (no sequencer ran: STOP here; else sq_block's) */
         plat_midi_send(0x0Fu | 0xFCu << 8, midi_to());
     app_say("PANIC", "ALL STOPPED");
@@ -12207,9 +12642,6 @@ static UI_LATE uint32_t pc_ticks(void)   /* (1.18C40) PLAY now (from a stop): PR
     uint32_t d;
     if (!SQ_PCB || ck.on) return 0;
     if (ui.view == V_SEQ && sqv.arec && SQ_PATSH >= 0) {
-#ifdef HYB_MULTI
-        if (sq_mi && set.mx_mode == SY_M_SINGLE) return 0;
-#endif
         d = sqp.div;
     } else if (ui.view == V_DRUM && sqv.rec && DR_PATSH >= 0) d = drp.div;
     else return 0;
@@ -12351,7 +12783,6 @@ static UI_LATE void ln_ask(uint32_t r)   /* row r's patterns asked for, the part
     for (q = 0; q < 3u; q++) {
         const int32_t p = (int32_t)set.ln[r][q] - 1;
         if (ln.iss >> q & 1u) continue;
-        if (q == 1u && LN_BOFF) { ln.iss |= 2u; continue; }   /* (one synth only: SYNTH 2 stays as it is) */
         ln_part(q, p);
         if (p >= 0 && ln_cur(q) == p && !sq_qrun(q) && LN_RUN) {   /* (1.18C18: the part stopped in a row before that left it NONE or was
                                           * silent: running again, joining silent to the row's line as the cells' knobs do) */
@@ -12382,7 +12813,6 @@ static UI_LATE void ln_fix(void)         /* 1.18C18: the row playing since its l
     uint32_t q, ok = 1;
     for (q = 0; q < 3u; q++) {
         const int32_t p = (int32_t)set.ln[ln.play - 1u][q] - 1;
-        if (q == 1u && LN_BOFF) continue;
         if (ln_cur(q) != p) { ln_part(q, p); if (ln_cur(q) != p) ok = 0; }
     }
     ln.fix = ok ? 0u : (uint8_t)(ln.fix - 1u);   /* (a countdown: a hand on PATTERN meanwhile is not fought for long) */
@@ -12412,7 +12842,6 @@ static UI_LATE uint32_t ln_len(uint32_t r)   /* row r's length (ticks): its long
 {
     uint32_t q, l = 0, t;
     for (q = 0; q < 3u; q++) {
-        if (q == 1u && LN_BOFF) continue;
         t = ln_plen(q, (int32_t)set.ln[r][q] - 1);
         if (t > l) l = t;
     }
@@ -12469,8 +12898,10 @@ static UI_LATE void ln_esel(uint32_t q)  /* 1.18C21: part key q held: that part 
         return;
     }
     ln.epd = 0;
-    sqv.last = 0;                        /* (SEQ's way from its start: the part edited's arp sequencer) */
-    part_edit(q);
+    sqv.last = 0;                        /* (SEQ's way from its start: the part's arp sequencer, sq_button) */
+    sqv.first = (uint8_t)q;
+    if (q && SQ_BMO) app_say("Seq B", (set.mo & MO_B) > 1u ? "MIDI ONLY" : "B OUT OFF");   /* (1.19.3: SINGLE, part B not edited) */
+    else part_edit(q);
 }
 #define LN_HOLD_MS 300u                  /* (1.18C21) a part key down this long is held, not tapped: no MUTE */
 static UI_LATE void ln_keys(void)        /* the part keys: down, up (a tap: MUTE and back; 1.18C21: a tap only, released before
@@ -12478,7 +12909,7 @@ static UI_LATE void ln_keys(void)        /* the part keys: down, up (a tap: MUTE
 {
     const uint32_t now = plat_ms();
     const uint32_t kk = ui.view == V_LNCH ? ui.keys : 0u,   /* (the three lowest white keys: 0, 2, 4) */
-                   k = ((kk & 1u) | (kk >> 1 & 2u) | (kk >> 2 & 4u)) & ~(LN_BOFF ? 2u : 0u), dn = k & ~(uint32_t)ln.keys, up = ln.keys & ~k;
+                   k = ((kk & 1u) | (kk >> 1 & 2u) | (kk >> 2 & 4u)), dn = k & ~(uint32_t)ln.keys, up = ln.keys & ~k;
     uint32_t q;
     ln.kused &= (uint8_t)~dn;
     ln.khold &= (uint8_t)~dn;
@@ -12492,6 +12923,8 @@ static UI_LATE void ln_keys(void)        /* the part keys: down, up (a tap: MUTE
         if ((up >> q & 1u) && !(ln.kused >> q & 1u) && !(ln.khold >> q & 1u)) {
             ln_mute ^= (uint8_t)(1u << q);
             if (q == 2u) dr_level();     /* (the knobs' strip: drawn by its signature, ln_draw) */
+            else if (LN_MMUTE(q)) sq_cut[q] = 1u;   /* (1.19.3: a row without a sound of its own muted: its notes
+                                          * sounding off over MIDI at the next block, sq_block) */
         }
     }
     ln.keys = (uint8_t)k;
@@ -12510,7 +12943,7 @@ static UI_LATE void ln_sync(void)        /* 1.18C21: a part's pattern changed el
         if (s == o && ln.sc0) continue;
         ln.sc[q] = s;
         if (c == (o & 0x7Fu) && !(s & ~o & 0x80u) && ln.sc0) continue;   /* (stopped, nothing new: the cell stays) */
-        if (!ln.sc0 || hold || (q == 1u && LN_BOFF) || set.ln[a][q] == c) continue;
+        if (!ln.sc0 || hold || set.ln[a][q] == c) continue;
         if (q < 2u && c && set.ln[a][!q] == c) continue;   /* (SYNTH 1's and 2's never the same in a row) */
         set.ln[a][q] = c;
     }
@@ -12721,7 +13154,6 @@ static UI_LATE void ln_knob(uint32_t k, int32_t e)   /* K1..K4 on the launcher *
         }
         return;
     }
-    if (k == 1u && LN_BOFF) { app_say("Synth 2", "OFF"); return; }   /* (one synth only: not editable) */
     ln_cell_step(k, e);
 }
 /* (1.18C27) the launcher's sets (ls_*, the record: ls_rec_t): their page comes up when SELECT
@@ -12972,10 +13404,10 @@ static UI_LATE void ln_seq_play(void)    /* 1.18C21: PLAY from a stop on a seque
     uint32_t r, q;
     for (r = 0; r < LN_ROWS && set.ln[r][3] == LN_NO; r++) {}
     if (r == LN_ROWS) {
-        if (ln_cur(0) < 0 && (LN_BOFF || ln_cur(1) < 0) && ln_cur(2) < 0) { seq_play(1); return; }
+        if (ln_cur(0) < 0 && ln_cur(1) < 0 && ln_cur(2) < 0) { seq_play(1); return; }
         r = 0;
         for (q = 0; q < 3u; q++)
-            if (!(q == 1u && LN_BOFF)) set.ln[0][q] = (uint8_t)(ln_cur(q) + 1);
+            set.ln[0][q] = (uint8_t)(ln_cur(q) + 1);
         if (set.ln[0][1] && set.ln[0][1] == set.ln[0][0]) set.ln[0][1] = 0;
         set.ln[0][3] = LN_REP;
     } else if (set.ln[ln_act() - 1u][3] != LN_NO) r = ln_act() - 1u;
@@ -13028,7 +13460,7 @@ static UI_LATE void ln_pre(void)         /* app_frame, before input: the launche
 static UI_LATE uint32_t ln_lights(uint32_t *lb, uint32_t *mid)   /* sq_lights on the launcher: the part keys lit,
                                           * half lit muted; HOME; EDIT with a part key held; REC on a list */
 {
-    const uint32_t m = (ln_mute | (LN_BOFF ? 2u : 0u)) & 7u, n = ~m & 7u;   /* (SYNTH 2 off: half lit) */
+    const uint32_t m = ln_mute & 7u, n = ~m & 7u;   /* (muted: half lit) */
     static const uint8_t BK[8] = {14, 16, 18, 19, 21, 23, 24, 26};   /* (1.18C21: the eight highest white keys, the row's bar) */
     uint32_t bar = 0, i, f = 0;
     *lb |= 1u << B_HOME | (ln.keys & 7u ? 1u << B_EDIT : 0u) | (lset.on ? 1u << B_REC | 1u << B_SAVE : 0u);   /* (the sets' page: REC, SAVE) */
@@ -13259,6 +13691,9 @@ static void input(void)
         seq_req = 0;
     }
     shift = (btn >> B_OCTDN & 1u) && (ui.btn >> B_OCTDN & 1u) && plat_ms() - ui.shift_t >= SHIFT_HOLD_MS && !ui.oc_pair;
+#ifdef HYB_MULTI
+    in_shift = (uint8_t)shift;           /* (1.19.2: the assignment editor's SHIFT + REC, played_rec) */
+#endif
     sr_mi_poll();                        /* (1.18C31: RECORD's MIDI notes in, as keys) */
     for (kc = (keys ^ ui.keys) & ((1u << NKEYS) - 1u); kc; kc &= kc - 1u) {   /* key 0 is F3 (MIDI 53). P8: only the
                                           * keys that changed (every branch below needs a change of its key); ui.keys is
@@ -13518,6 +13953,9 @@ static void input(void)
         }
         if (ui.view == V_PLAYED) {       /* the editor: K1 as SELECT */
             if (k == 0u) played_select(e);
+#ifdef HYB_MULTI
+            else if (k == 1u) played_cc(e);   /* (1.19.2: K2 the control's MIDI CC) */
+#endif
             continue;
         }
         if (sv_on()) {                   /* SAVE: K1 a bank; the name: K1 the cursor, K2 the case */
@@ -13742,7 +14180,7 @@ static void draw_home(uint32_t now)
     {   /* the parts: their patches, the mode, the part edited (the rows instead of Bluetooth's) */
         hm.mx_mode = set.mx_mode;
         hm.mx_ed = ed_part;
-        hm.mx_ch = set.mx_chb;
+        hm.mx_ch = set.mo & MO_BOMNI ? 17u : set.mx_chb;   /* (1.19.4: B IN OMNI, 17) */
         hm.mx_a[0] = hm.mx_b[0] = 0;
         patch_label(hm.mx_a, ed_part ? patch_o : set.patch, ed_part ? shadow_o : shadow);
         patch_label(hm.mx_b, ed_part ? set.patch : patch_o, ed_part ? shadow : shadow_o);
@@ -13955,7 +14393,9 @@ static UI_LATE void ui_theme_follow(void)        /* the colours: the part edited
                                           * flash's code before the engine's stays short) */
 {
 #ifdef HYB_MULTI
-    uint32_t th = ui.view == V_DRUM || ui.view == V_KIT ? U_TH_DRUM : ui.view == V_SEQ ? sq_mi : ed_part;
+    uint32_t th = ui.view == V_DRUM || ui.view == V_KIT ? U_TH_DRUM : ui.view == V_SEQ ? (sq_mi && SQ_BMO ? U_TH_GREY : sq_mi)
+                                                                                   : ed_part;   /* (1.19.3: SEQ B
+                                          * in SINGLE, MIDI only, the greys) */
     if (ui.view != V_SEQ && th == ed_part && u_th == &U_THEMES[!ed_part] && set.mx_mode != SY_M_SINGLE) {   /* (0.83: the arp sequencer
                                           * of the other part left for another page: that part edited, its colours
                                           * kept; from the drums' pages the part edited before, as it was) */
@@ -14626,6 +15066,7 @@ UI_SMALL void app_frame(void)
 #endif
     input();
 #ifdef HYB_MULTI
+    pmcc_run(now);                       /* (1.19.2: PLAY mode's controls' MIDI CCs, LEARN) */
     ln_idle();                           /* (the launcher's rows: the next one's patterns asked before its line) */
 #endif
     hold_zone_fix();                     /* (1.16: SPLIT, a key let go latched by the part edited's HOLD, its zone's

@@ -38,6 +38,9 @@ EOT
     '#define plat_battery() host_batt()                 /* (hostcmd.c: "batt" sets the level the launcher shows) */' \
     'static int32_t host_enc(int role);' \
     '#define plat_enc(r) host_enc(r)                    /* (hostcmd.c, 1.18C21: a detent in between two reads, "turnlate") */'
+  grep -q host_midi_in $R/cleaner/tools/perf/host/hostcmd.c && printf '%s\n' '#define HOST_XM' \
+    'static int host_midi_in(uint32_t *p, int *port);' \
+    '#define plat_midi_in(p, q) host_midi_in(p, q)     /* (hostcmd.c, 1.19.5: a simulated clock master, "xm") */'
   cat $M/h/fm1t/app.c; } > $M/h/fm1t/app.c.t && mv $M/h/fm1t/app.c.t $M/h/fm1t/app.c
 cat $R/cleaner/tools/perf/host/hostcmd.c >> $M/h/fm1t/app.c
 B="tools/build.py"

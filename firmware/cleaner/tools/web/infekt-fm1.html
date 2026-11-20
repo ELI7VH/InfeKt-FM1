@@ -1209,7 +1209,7 @@ const IS_STOCK = (product) => /^FM-1_0\d\d$/.test(product) && product !== "FM-1_
 // The identity request is the maker's USB chip's, not the FM-1's own: other gear built on it answers in the same format
 // (a keyboard: "SMK25V2_130"; another product's update loader: "ota-SMK-37 Pro_900"). Only the FM-1's identities make a
 // port the FM-1: "FM-1_" and digits (the maker's firmware FM-1_0xx, its Open firmware FM-1_80000xx, m-bootloader's
-// installer FM-1_099, fm1-base's builds, InfeKt and its earlier builds FM-1_13...), an update loader "ota-FM-1_" and digits (the
+// installer FM-1_099, fm1-base's builds, InfeKt and its earlier builds FM-1_49... and before 1.19.5 FM-1_13...), an update loader "ota-FM-1_" and digits (the
 // stock one ota-FM-1_015, m-bootloader's / fm1-base's ota-FM-1_900), the Open firmware's FM1_OFFICIAL_OPEN /
 // FM1_COMMUNITY_<n> and its loader ota-FM1C_<hex>. Any other answer is other gear: never the FM-1, nothing more sent
 const FM1_ID_RE = /^(ota-)?FM-1_\d+$/;
@@ -1277,7 +1277,7 @@ function flashOf(pkt) {
 // m-bootloader's boot area only on the Puya (m-bootloader 1.1 / 1.2 left one UC25HQ80 unit that did not start)
 const FLASH_PARTS = { 0x856014: "Puya P25Q80", 0xB36014: "UC25HQ80" };
 const FLASH_PUYA = 0x856014;
-// InfeKt and its earlier builds 1.11 and older (FM-1_13 and six digits below 011200): their update session ran only on the Puya
+// InfeKt and its earlier builds 1.11 and older (the former identity FM-1_13 and six digits below 011200): their update session ran only on the Puya
 // (flash_ok accepted 856014 alone; 1.12 takes the UC25HQ80 too). On a newer FM-1 with the UC25HQ80 they never ask for
 // the package: the first stage stops after 0 requests, and only the rescue tools (the installer's rescue/) help
 const OLD_GATE = (text) => { const m = /^FM-1_13(\d{6})$/.exec(text || ""); return !!m && +m[1] < 11200; };
@@ -1621,15 +1621,24 @@ class Updater {
     } finally { this.unwatch(); }
   }
 }
-/* the identity's text as a name and version (the package identity: id_prefix FM-1_13 and the version's six digits) */
+/* the identity's text as a name and version (the package identity: id_prefix and the version's six digits). This
+ * firmware's prefix is ID_PREFIX (fm1.toml id_prefix) from 1.19.5 on; FORMER_IDS holds the prefixes it had before
+ * (FM-1_13: InfeKt and its earlier builds up to 1.19.4), still this firmware: found, named with their version and updated as any.
+ * A version is read from its six digits alone, never compared as the whole number across prefixes */
+const ID_PREFIX = "FM-1_49";
+const FORMER_IDS = ["FM-1_13"];
+const OWN_IDS = [ID_PREFIX, ...FORMER_IDS];
 function versionOf(text) {
-  const m = /^FM-1_13(\d\d)(\d\d)(\d\d)$/.exec(text || "");
-  if (m) return { family: true, version: `${+m[1]}.${m[2]}${m[3] !== "00" ? "." + +m[3] : ""}` };
-  if (/^FM-1_13\d{0,6}$/.test(text || "")) return { family: true, version: "" };
+  for (const p of OWN_IDS) {
+    if (!(text || "").startsWith(p)) continue;
+    const m = /^(\d\d)(\d\d)(\d\d)$/.exec(text.slice(p.length));
+    if (m) return { family: true, version: `${+m[1]}.${m[2]}${m[3] !== "00" ? "." + +m[3] : ""}` };
+    if (/^\d{0,6}$/.test(text.slice(p.length))) return { family: true, version: "" };
+  }
   return { family: false, version: "" };
 }
 return { BLOCKS, productOf, logicalImage, crc16, checkUfw, ufwEntries, HS_QUERY, UPGRADE, pack7, unpack7, response,
-         parseRequest, parseIdentity, foreignOf, IS_FM1_ID, FLASH_PARTS, OLD_GATE, Link, handshake, frame, query, Updater, pairsOf, IS_OTA, IS_STOCK, PORT_NAMES, fail, sleep, versionOf };
+         parseRequest, parseIdentity, foreignOf, IS_FM1_ID, FLASH_PARTS, OLD_GATE, Link, handshake, frame, query, Updater, pairsOf, IS_OTA, IS_STOCK, PORT_NAMES, fail, sleep, versionOf, ID_PREFIX, FORMER_IDS };
 })();
 if (typeof module !== "undefined") module.exports = FW;
 </script>
@@ -2982,7 +2991,7 @@ async function openApp() {               // the app's own protocols on the answe
   if (!wv.link) wv.link = await wv.open();
   DEV.feat = { bank: !!bk.link, waves: !!wv.link };
 }
-// this firmware runs there: its identity (InfeKt and its earlier builds, FM-1_13...), or none (Bluetooth: the patch / wave hello answered)
+// this firmware runs there: its identity (InfeKt and its earlier builds, FM-1_49... or a former one, FM-1_13...), or none (Bluetooth: the patch / wave hello answered)
 function ownFw(id) { return !id || (!FW.IS_OTA(id) && FW.versionOf(id.text).family); }
 // before anything is sent: the answered pair, searched for when there is none (or it is gone). True: the FM-1 there
 async function ensureDev() {
@@ -3290,7 +3299,7 @@ async function sha256hex(raw) {
     if (FWDATA.boot.license) { $("f-bootlictext").textContent = FWDATA.boot.license; $("f-bootlic").hidden = false; }
   } catch (_) { /* no option, then */ }
 })();
-/* another package of this firmware, chosen by the user (the identity FM-1_13...) */
+/* another package of this firmware, chosen by the user (the identity FM-1_49..., or a former one: FM-1_13...) */
 $i("fwfile").addEventListener("change", async (e) => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;

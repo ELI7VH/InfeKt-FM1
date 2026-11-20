@@ -230,6 +230,19 @@ check(productOf(raw) === "FM-1_099" && ldr && ldr.len > 0, "the package: FM-1_09
   check(versionOf("FM-1_13009500").version === "0.95" && versionOf("FM-1_13009601").version === "0.96.1" &&
         versionOf("FM-1_13010000").version === "1.00" && versionOf("FM-1_1300").family && !versionOf("FM-1_016").family,
         "the identity's version: FM-1_13009500 = 0.95, FM-1_1300 a dev build");
+  check(versionOf("FM-1_49011905").version === "1.19.5" && versionOf("FM-1_13011900").version === "1.19" &&
+        versionOf("FM-1_13011800").version === "1.18" && versionOf("FM-1_4900").family && versionOf("FM-1_49011905").family &&
+        !versionOf("FM-1_4").family && !versionOf("FM-1_490119051").family && !versionOf("FM-1_0049011905").family,
+        "1.19.5's prefix FM-1_49 and the former FM-1_13: both this firmware, the version from the six digits alone");
+}
+// ---- added (1.19.5): an update across the two prefixes: InfeKt 1.19 (FM-1_13011900) to 1.19.5 (FM-1_49011905) and
+// back, through the loader, as any other install
+for (const [from, to] of [["FM-1_13011900", "FM-1_49011905"], ["FM-1_49011905", "FM-1_13011900"]]) {
+  const a = port("InfeKt-FM1"), l = port("FM-1 Update");
+  const d = new Dev(a, from, [[l, "ota-FM-1_1"], [a, to]], 0xB36014);
+  let got = null, err = null;
+  try { got = await new Updater(midi([a, l])).install(image, to, () => {}); } catch (e) { err = e; }
+  check(!err && got === to && d.ups > 0, `${from} -> ${to}: installed (${err ? err.code : got})`);
 }
 // ---- added: other gear that answers the identity request (the maker's USB chip's: an SMK-25 keyboard answers it with its
 // own identity), and one that answers with a universal identity reply: never the FM-1, nothing but the request sent to it

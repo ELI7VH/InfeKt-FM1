@@ -1118,7 +1118,7 @@ static void home_conn(int32_t h)         /* MIDI in by port; USB, the computer a
         char lb[12];
         lb[0] = 0;
         text_cat(lb, MB[hm.mx_mode & 3u]);
-        if (hm.mx_mode == 3u) { if (hm.mx_ch) put_sint(lb + 5, hm.mx_ch, 0); else text_cat(lb, "OFF"); }
+        if (hm.mx_mode == 3u) { if (hm.mx_ch > 16u) text_cat(lb, "OMNI"); else if (hm.mx_ch) put_sint(lb + 5, hm.mx_ch, 0); else text_cat(lb, "OFF"); }   /* (1.19.4: B IN OMNI) */
         (void)nm;
         home_line(2, "PART A", hm.mx_a, hm.mx_mode && !hm.mx_ed);
         home_line(3, lb, hm.mx_mode ? hm.mx_b : "OFF", hm.mx_mode && hm.mx_ed);
@@ -1161,9 +1161,10 @@ static void home_conn(int32_t h)         /* MIDI in by port; USB, the computer a
 #define LS_N 5
 #define LS_H 34                          /* a line's rows, its gap included (5 x 34 of UI_BODY_H's 171) */
 #define LS_TY ((LS_H - 2 - 24) / 2)      /* the text's top in its line (FONT_M, 24 rows) */
-enum { LS_EMPTY = 1, LS_DOT = 2, LS_LED = 4, LS_LIT = 8, LS_STAR = 16 };   /* an empty slot (a box); a patch with
-                                          * edits; a light at the line's end (0.92: the matrix's slots), lit; a
-                                          * favorite (1.18C33: a star at the line's end) */
+enum { LS_EMPTY = 1, LS_DOT = 2, LS_LED = 4, LS_LIT = 8, LS_STAR = 16 };   /* an empty slot (a box); a
+                                          * patch with edits; a light at the line's end (0.92: the matrix's slots), lit; a
+                                          * favorite (1.18C33: a star at the line's end). (1.19.1 .. 1.19.2: LS_DIM, a
+                                          * line dimmed: GLO > MIDI > B CHANNEL in SINGLE; 1.19.3 none) */
 typedef void (*ls_item_fn)(uint32_t i, char *t, char *pre, uint32_t *fl);
 typedef void (*ls_foot_fn)(char *l, char *r);   /* a list's foot strip: the bank letters before / after ("" none) */
 static ls_foot_fn ls_foot;               /* (set by the list's owner after ls_set; the list then has one line less) */
@@ -2404,7 +2405,7 @@ static UI_LATE uint32_t ln_sigc(uint32_t w, uint32_t c)   /* what cell c of the 
     if (r >= LN_ROWS) return 1u;
     if (c == 0u) return f | r << 4;
     if (c < 4u) return f | (uint32_t)set.ln[r][c - 1u] << 4 | (uint32_t)(!w && (ln.keys >> (c - 1u) & 1u)) << 12
-                       | (uint32_t)(c == 2u && LN_BOFF) << 13 | (uint32_t)(ln_mute >> (c - 1u) & 1u) << 14;
+                       | (uint32_t)(c == 2u && SQ_BMO) << 13 | (uint32_t)(ln_mute >> (c - 1u) & 1u) << 14;
     return f | (uint32_t)set.ln[r][3] << 4 | (uint32_t)(ln.play == r + 1u) << 8
            | (uint32_t)(ln.next == r + 1u && ln.next != ln.play) << 9;
 }
@@ -2436,10 +2437,12 @@ static UI_LATE void ln_cell(int32_t h)   /* the cell ln_dw, ln_dc of the table (
         put_sint(s, (int32_t)r + 1, 0);
         cv_text((wd - text_w(&FONT_M, s)) / 2, H - 26, &FONT_M, s, ln_dw ? U_DIMTXT : U_TEXT);
     } else if (c < 4u) {                 /* (the part's colour filled, none grey) */
-        const uint32_t q = c - 1u, v = set.ln[r][q], off = q == 1u && LN_BOFF, mu = !off && (ln_mute >> q & 1u);
-        cv_rect(2, 1, wd - 4, H, off || (!v && !mu) ? RGB(44, 44, 49) : mu ? RGB(178, 178, 184) : U_THEMES[q].acc);   /* (1.18C21: muted: light grey) */
+        const uint32_t q = c - 1u, v = set.ln[r][q], mo = q == 1u && SQ_BMO, mu = ln_mute >> q & 1u;
+        cv_rect(2, 1, wd - 4, H, !v && !mu ? RGB(44, 44, 49) : mu ? RGB(178, 178, 184)
+                                 : mo ? U_THEMES[U_TH_GREY].lcdrim : U_THEMES[q].acc);   /* (1.18C21: muted: light grey;
+                                          * 1.19.3: SEQ B MIDI only in SINGLE, a mid grey) */
         if (v) put_sint(s, (int32_t)v, 0); else text_cat(s, "-");
-        ln_big(2, wd - 4, s, mu ? RGB(36, 36, 40) : off || !v ? U_DIMTXT : U_THEMES[q].onacc);
+        ln_big(2, wd - 4, s, mu ? RGB(36, 36, 40) : !v ? U_DIMTXT : mo ? U_THEMES[U_TH_GREY].valon : U_THEMES[q].onacc);
     } else {
         const uint32_t m = set.ln[r][3] < LN_NMODE ? set.ln[r][3] : 0u;
         cv_rect(2, 1, wd - 4, H, ln.play == r + 1u ? RGB(110, 190, 255) : RGB(58, 58, 64));   /* (the row playing: light blue, black text) */
@@ -2460,7 +2463,10 @@ static UI_LATE void ln_knob1(int32_t h)  /* part ln_dc's volume as a knob (muted
     const u_theme_t *t = u_th;
     if (LN_EP == c) cv_rect(0, 0, LN_CW, h, U_THEMES[c].lcdglow);   /* (1.18C21: the part edited: its colour half lit behind) */
     u_th = &U_THEMES[c];                 /* (its arc in the part's colour) */
-    knob((LN_CW - 26) / 2, 2, (float)v / (float)mx, 0, !(ln_mute >> c & 1u) && !(c == 1u && LN_BOFF), 26);
+    if (c == 1u && SQ_BMO)               /* (1.19.3: SEQ B MIDI only in SINGLE: "MIDI" for part B's volume) */
+        cv_text((LN_CW - text_w(&FONT_M, "MIDI")) / 2, (h - FONT_M.h) / 2, &FONT_M, "MIDI",
+                ln_mute >> 1 & 1u ? U_DIMTXT : U_THEMES[U_TH_GREY].valon);
+    else knob((LN_CW - 26) / 2, 2, (float)v / (float)mx, 0, !(ln_mute >> c & 1u), 26);
     u_th = t;
     if (ln.keys >> c & 1u) ln_rim(0, 0, LN_CW, h, 2, U_TEXT);
 }
@@ -2533,7 +2539,7 @@ static UI_LATE void ln_draw(int all)     /* the page: all of it, or the cells th
     for (c = 0; c < 3u; c++) {           /* (the knobs under the columns) */
         const uint32_t v = c == 2u ? set.dr_lev : pv_vol[c];
         g = 1u << 29 | v | (uint32_t)(ln_mute >> c & 1u) << 8 | (uint32_t)(ln.keys >> c & 1u) << 9
-            | (uint32_t)(c == 1u && LN_BOFF) << 10 | (uint32_t)(LN_EP == c) << 11;
+            | (uint32_t)(c == 1u && SQ_BMO) << 10 | (uint32_t)(LN_EP == c) << 11;
         if (g == ln_sg[LN_SHOW * 5u + c]) continue;
         if (!nb) return;
         nb--;

@@ -30,7 +30,8 @@ are left out (waves 0 and 1 are the engine's own, not user slots). Offered as "I
 by the web synth.
 
 The package's identity is read from it (one marker byte after each of the first 20 blocks, as the page's productOf)
-and must be this firmware's (FM-1_13...); the version, when not given, comes from the identity (FM-1_13009600: 0.96).
+and must be this firmware's (FM-1_49..., before 1.19.5 FM-1_13...); the version, when not given, comes from the identity
+(FM-1_49011905: 1.19.5, FM-1_13009600: 0.96).
 m-bootloader is offered on the page only when its package is the one embedded here (its SHA-256 is checked there).
 """
 import argparse, base64, gzip, hashlib, json, os, pathlib, re, subprocess, sys, tempfile
@@ -79,7 +80,7 @@ def product_of(raw):
 
 
 def version_of(product):
-    m = re.fullmatch(r'FM-1_13(\d\d)(\d\d)(\d\d)', product)
+    m = re.fullmatch(r'FM-1_(?:49|13)(\d\d)(\d\d)(\d\d)', product)   # (OWN_IDS: FM-1_49, the former FM-1_13)
     if not m:
         return ''
     return f'{int(m[1])}.{m[2]}' + (f'.{int(m[3])}' if m[3] != '00' else '')
@@ -127,8 +128,8 @@ def main():
     if a.fwsc:
         raw = pathlib.Path(a.fwsc).read_bytes()
         product = product_of(raw)
-        if not product.startswith('FM-1_13'):
-            raise SystemExit(f'{a.fwsc}: identity {product!r} is not this firmware (FM-1_13...)')
+        if not product.startswith(('FM-1_49', 'FM-1_13')):
+            raise SystemExit(f'{a.fwsc}: identity {product!r} is not this firmware (FM-1_49..., FM-1_13...)')
         data = {'product': product, 'version': a.version or version_of(product),
                 'pkg': base64.b64encode(raw).decode('ascii')}
         if a.boot:
