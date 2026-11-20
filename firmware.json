@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "id": "infekt-fm1",
+  "name": "InfeKt-FM1",
+  "author": "J0KERPACK",
+  "license": "GPL-3.0-only",
+  "tagline": "A virtual analog synthesizer firmware for the M-VAVE FM-1",
+  "description": "InfeKt-FM1 turns the M-VAVE FM-1 into a virtual analog synthesizer: three oscillators per voice with sub, noise and ring modulator, two multimode filters with analog modes and saturation, three LFOs, a six-slot modulation matrix, up to 16 voices with unison and two parts as layer or split. Distortion, chorus, phaser, EQ, delay, reverb and a shimmer; an arpeggiator, a sequencer played from the keys, an 11-instrument drum machine; MIDI over USB, Bluetooth and the TRS jack; a web editor and patch manager.",
+  "tags": ["synth", "sequencer", "drum-machine", "midi"],
+  "install": "https://j0kerpack.github.io/InfeKt-FM1/install.html",
+  "site": "https://j0kerpack.github.io/InfeKt-FM1/",
+  "source": "https://github.com/j0kerpack/InfeKt-FM1",
+  "screenshot": "docs/img/screen.png",
+  "hardware": {
+    "models": ["FM-1"],
+    "flash": ["856014", "B36014"],
+    "features": ["bluetooth-midi", "bluetooth-midi-devices", "usb-audio-in", "second-core", "velocity", "pressure"]
+  },
+  "credits": "Built on fm1-base and felucca-bsp (MPL-2.0), by Charles Vestal and Leo Kuroshita (Hügelton Instruments)."
+}

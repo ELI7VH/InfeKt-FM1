@@ -187,3 +187,7 @@ table.keys { margin: 0 0 14px; }
 @media (max-width: 760px) { .navgrid { grid-template-columns: 1fr; } }
 .fmpanel [stroke="#c8341c"] { stroke: #8d8d97; }
 .fmpanel [fill="#c8341c"] { fill: #8d8d97; }
+
+/* the "Try it" page: the emulator's frame keeps the panel's proportion */
+.frame.emu { height: auto; aspect-ratio: 1280 / 1010; }
+@media (max-width: 760px) { .frame.emu { height: auto; aspect-ratio: 390 / 640; } }
