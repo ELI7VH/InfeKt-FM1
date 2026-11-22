@@ -1,6 +1,6 @@
 # InfeKt-FM1
 
-*A virtual analog synthesizer firmware for the M-VAVE FM-1, by J0KERPACK.* Version 1.19.8.
+*A virtual analog synthesizer firmware for the M-VAVE FM-1, by J0KERPACK.* Version 1.19.8 (beta): still in development and tested on only a few devices, so errors are possible; please report them in the [issues](https://github.com/j0kerpack/InfeKt-FM1/issues).
 
 It was about time: the InfeKt-FM1 is finally released. It turns the small FM-1 into a full virtual analog
 synthesizer whose sound comes very close to the original, and it is **compatible with Virus patches**.
