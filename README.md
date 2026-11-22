@@ -5,7 +5,7 @@
 It was about time: the InfeKt-FM1 is finally released. It turns the small FM-1 into a full virtual analog
 synthesizer whose sound comes very close to the original, and it is **compatible with Virus patches**.
 
-What the InfeKt-FM1 cannot give you is the incomparable hands-on feel of the original. That is why I very much hope
+What the InfeKt-FM1 cannot give you is the incomparable hands-on feel and the unmatched sound quality of the original. That is why I very much hope
 the Virus will be available again in the future.
 
 **Website, installer and guide: https://j0kerpack.github.io/InfeKt-FM1/**  
