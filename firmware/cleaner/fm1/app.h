@@ -5,7 +5,8 @@
 #include <stdint.h>
 #include "plat.h"
 
-#define HYB_VERSION "1.19.5"            /* the firmware's version, shown in GLO > ABOUT: the one place to change it (the
+#define HYB_VERSION "1.19.8"            /* the firmware's version, shown in GLO > ABOUT: the one place to change it (the
+                                          * 1.19.7: OCT- / OCT+ the octave while RECORD is armed.
                                           * release package script reads it from here for build_multi_ble.sh --release,
                                           * the page's --version and the file names). 1.19: the first public
                                           * release, 1.18C49's firmware with the version and ABOUT's strings changed.

@@ -1,6 +1,6 @@
 # InfeKt-FM1: source code
 
-The source of the InfeKt-FM1 firmware for the M-VAVE FM-1, version 1.19.5: the synthesizer engine, the FM-1 app around
+The source of the InfeKt-FM1 firmware for the M-VAVE FM-1, version 1.19.8: the synthesizer engine, the FM-1 app around
 it (pages, sequencer, drum machine, launcher, bank store, Bluetooth build), the host renderer and test programs, and
 the scripts that measured and fitted the engine's numbers.
 
@@ -41,12 +41,12 @@ says so.
 ## Building
 
 You need: `make`, a C compiler and Python 3 with numpy (host renderer); for the firmware also the JieLi pi32v2
-toolchain, the JieLi AC79 SDK files (Apache-2.0) and fm1-base with felucca-bsp (MPL-2.0) as used for 1.19.5, published
-beside the binary as `infekt-fm1-1.19.5-fm1-base-src.tar.gz`. Unpack it as `firmware/fm1-base` (or set `FM1_BASE`); set
+toolchain, the JieLi AC79 SDK files (Apache-2.0) and fm1-base with felucca-bsp (MPL-2.0) as used for 1.19.8, published
+beside the binary as `infekt-fm1-1.19.8-fm1-base-src.tar.gz`. Unpack it as `firmware/fm1-base` (or set `FM1_BASE`); set
 `JIELI_TOOLCHAIN` and `AC79_SDK` (fm1-base's `bsp/tools/get_sdk.sh` and its README say where they come from).
 
     make -C firmware/cleaner                                   # build/engine: the host renderer
-    cd firmware/cleaner/fm1 && sh build_multi_ble.sh --release 1.19.5   # the public build: two parts, Bluetooth
+    cd firmware/cleaner/fm1 && sh build_multi_ble.sh --release 1.19.8   # the public build: two parts, Bluetooth
     cd firmware/cleaner/fm1 && sh build_usb.sh                 # the USB build (two parts, no Bluetooth)
 
 `unifdef` is not needed to build; the host-simulator tests (`tools/perf/host/mk.sh`, `tests/run.sh`) need fm1-base's

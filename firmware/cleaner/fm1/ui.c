@@ -2145,7 +2145,10 @@ static UI_LATE uint32_t dr_sig(uint32_t w)       /* what part w shows (never 0) 
     if (w <= 4u)
         return 1u | k << 1 | (uint32_t)sqv.sel << 2
                | (w == 1u ? b & 3u : w == 2u ? b >> 2 & 7u : w == 3u ? (uint32_t)(DR_AL(sqv.ins, sqv.sel) + 7) : on) << 8;
-    if (w == 5u || w == 10u) return 1u;  /* (unused: nothing drawn; 1.18C24: LEVEL has no column, its knob works) */
+    if (w == 5u) return 1u;              /* (unused: nothing drawn) */
+    if (w == 10u) return 1u | (uint32_t)set.dr_lev << 2;   /* (1.18C24: LEVEL has no column, its knob works; 1.19.7:
+                                          * its value in the signature, so the strip's title follows each detent
+                                          * (sq_tt_sig); up to 1.19.6 it kept the first detent's value) */
     return 1u | k << 1 | (w == 6u ? drp.lc : w == 7u ? drp.div : w == 8u ? (set.sq_pad & DR_DISARM ? 255u : set.dr_pat)
                                                                               | sq_qt[2] << 8
                           : sqv.clr) << 2;

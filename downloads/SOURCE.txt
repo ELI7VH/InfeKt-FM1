@@ -1,4 +1,4 @@
-InfeKt-FM1 1.19.5: source code of the MPL-2.0 platform files
+InfeKt-FM1 1.19.8: source code of the MPL-2.0 platform files
 =========================================================
 
 The InfeKt-FM1 firmware is built on two MPL-2.0 projects:
@@ -6,15 +6,15 @@ The InfeKt-FM1 firmware is built on two MPL-2.0 projects:
   fm1-base     https://github.com/charlesvestal/fm1-base   (Charles Vestal and contributors)
   felucca-bsp  https://github.com/hugelton/felucca-bsp     (Leo Kuroshita, Hugelton Instruments; fm1-base's bsp/)
 
-The firmware infekt-fm1-1.19.5-multi-ble.fwsc uses them with changes (the key lights' fade group, the
+The firmware infekt-fm1-1.19.8-multi-ble.fwsc uses them with changes (the key lights' fade group, the
 USB audio input, the second core's guard, Bluetooth MIDI as a central and SysEx over Bluetooth, the newer flash chip,
 partial store reads and writes, the audio FIFO, smaller font data, build options and more). As the Mozilla Public
 License 2.0 asks (section 3.2), their source code exactly as built is published next to the firmware:
 
-  infekt-fm1-1.19.5-fm1-base-src.tar.gz
+  infekt-fm1-1.19.8-fm1-base-src.tar.gz
 
-    fm1-base at commit 62cc8761d0565f1f1110dadb79edffc21e611b7b (branch led-fade of this project's copy),
-    with bsp/ = felucca-bsp at commit 557bbff962c3872fa83ff7d8000dc3542e615e08.
+    fm1-base at commit b4bac9b8d3a35b442d07713486437b19fe8a52a0 (branch led-fade of this project's copy),
+    with bsp/ = felucca-bsp at commit f703b090129c831537c39e4aaa0c09ae0835d130.
     Based on upstream fm1-base 4587fda and felucca-bsp 2cd696a;
     CHANGES-fm1-base.diff and CHANGES-felucca-bsp.diff in the archive show every change against those.
     Without .git, without build outputs. The JieLi AC79 SDK files a build needs are not in it

@@ -1,4 +1,4 @@
-The licences of the parts of InfeKt-FM1 1.19.5 (CREDITS.txt says which part is under which):
+The licences of the parts of InfeKt-FM1 1.19.8 (CREDITS.txt says which part is under which):
 
   MPL-2.0.txt             fm1-base and felucca-bsp (in the firmware), the page infekt-fm1.html, rescue/fm1_rescue.py
   Apache-2.0.txt          JieLi's AC79 SDK: the Bluetooth libraries and the package files in the firmware

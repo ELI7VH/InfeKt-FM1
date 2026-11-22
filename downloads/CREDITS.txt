@@ -1,4 +1,4 @@
-InfeKt-FM1 1.19.5: credits and licences
+InfeKt-FM1 1.19.8: credits and licences
 ====================================
 
 InfeKt-FM1 (the synthesizer engine, the firmware's application, the web page) by J0KERPACK.
@@ -28,7 +28,7 @@ felucca-bsp (https://github.com/hugelton/felucca-bsp): the board support underne
   Leo Kuroshita, Hugelton Instruments; the second core's code by Kerem Kilic (from Melodee); see
   LICENSES/felucca-bsp-NOTICE.txt.
 The firmware is built from fm1-base and felucca-bsp with changes; their source as built is published as
-infekt-fm1-1.19.5-fm1-base-src.tar.gz (see SOURCE.txt;
+infekt-fm1-1.19.8-fm1-base-src.tar.gz (see SOURCE.txt;
 https://github.com/j0kerpack/InfeKt-FM1/tree/main/downloads).
 
 

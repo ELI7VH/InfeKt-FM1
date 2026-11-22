@@ -35,7 +35,7 @@
 
 <div class="guide">
 <section class="panel"><h2>Guide</h2>
-<p>InfeKt-FM1 1.19.5, the short tour. Read it once, then keep it open while you play.</p>
+<p>InfeKt-FM1 1.19.8, the short tour. Read it once, then keep it open while you play.</p>
 <ul class="toc"><li><a href="#install">Install</a></li><li><a href="#play">Play</a></li><li><a href="#edit">Edit and save</a></li><li><a href="#seq">Arp, sequencer, drums</a></li><li><a href="#parts">Two parts</a></li><li><a href="#midi">MIDI and Bluetooth</a></li><li><a href="#web">Web editor</a></li></ul></section>
 
 <section class="panel nav" id="navigate"><h2>Finding your way</h2>
@@ -75,7 +75,7 @@
 <li>The FM-1 restarts with InfeKt-FM1. <span class="scr">GLO › ABOUT</span> shows the version.</li>
 </ol>
 </div>
-<figure><img class="shot" src="img/screen-about.png" width="240" height="240" alt="GLO › ABOUT on the FM-1's display: INFEKT-FM1 1.19.5, BY J0KERPACK, KO-FI.COM/J0KERPACK, DIAGNOSIS, BACK"><br>GLO › ABOUT</figure>
+<figure><img class="shot" src="img/screen-about.png" width="240" height="240" alt="GLO › ABOUT on the FM-1's display: INFEKT-FM1 1.19.8, BY J0KERPACK, KO-FI.COM/J0KERPACK, DIAGNOSIS, TRS IN"><br>GLO › ABOUT</figure>
 </div>
 <p>When you switch on, a light runs across the keys. Just start playing: any key ends it.</p>
 <p class="tip">Want your old firmware back? The installer has a section for that on its first tab.</p>
@@ -94,7 +94,7 @@
 <p>The 27 keys play with velocity. <kbd>OCT−</kbd> and <kbd>OCT+</kbd> move two octaves each way. <kbd>MASTER</kbd> is the volume, <kbd>ALGO</kbd> the tempo.</p>
 <p><kbd>REC</kbd> on the HOME screen is HOLD: notes keep sounding until you press it again.</p>
 <h4>PLAY mode</h4>
-<p>Hold <kbd>PLAY</kbd> for half a second. Now the seven controls (the four knobs, <kbd>SELECT</kbd>, <kbd>PRESET</kbd> and <kbd>ALGO</kbd>) play the parameters you chose for them. Press <kbd>SHIFT</kbd>+<kbd>PLAY</kbd> to choose. There each control can also get a MIDI CC: turn <kbd>K2</kbd>, or press <kbd>SHIFT</kbd>+<kbd>REC</kbd> and move a knob on your controller to learn it. Hold <kbd>PLAY</kbd> again to leave. A short press on <kbd>PLAY</kbd> always just starts or stops the sequencers.</p>
+<p>Hold <kbd>PLAY</kbd> for half a second. Now the seven controls (the four knobs, <kbd>SELECT</kbd>, <kbd>PRESET</kbd> and <kbd>ALGO</kbd>) play the parameters you chose for them. Press <kbd>EDIT</kbd> (or <kbd>SHIFT</kbd>+<kbd>PLAY</kbd>) to choose them in <span class="scr">ASSIGN</span>: <kbd>SELECT</kbd> moves to a control, <kbd>REC</kbd> opens its list and takes a parameter, <kbd>HOME</kbd> goes back. <kbd>EDIT</kbd> again switches between <span class="scr">ASSIGN</span> and <span class="scr">MATRIX</span>. Hold <kbd>PLAY</kbd> again to leave. A short press on <kbd>PLAY</kbd> starts or stops the sequencers; holding it leaves a running sequencer running.</p>
 <table class="keys">
 <tr><td><kbd>SHIFT</kbd></td><td>hold <kbd>OCT−</kbd> for half a second</td></tr>
 <tr><td><kbd>SHIFT</kbd>+<kbd>HOME</kbd></td><td>undo (the last five changes of a sound)</td></tr>
@@ -151,9 +151,9 @@
 </div>
 <p><strong>Chord steps:</strong> hold a step, turn <span class="scr">EVENT</span> to <span class="scr">CHORD</span> and let go. Tap up to six notes. <kbd>REC</kbd> keeps the chord, <kbd>HOME</kbd> cancels.</p>
 <p><strong>Play it from the keys:</strong> a step's <span class="scr">EVENT</span> can also be a finger. <span class="scr">FING 1</span> to <span class="scr">FING 8</span> play the notes you hold on the keys, <span class="scr">F POLY</span> plays all of them. So the pattern follows your hands. With <span class="scr">KEY LATCH</span> (in the sequencer's <span class="scr">EDIT</span> list) your chord keeps playing after you let go. <span class="scr">PATCH ARP</span> is on as standard: chord and <span class="scr">F POLY</span> steps then run through the sound's arpeggiator.</p>
-<p><strong>Record:</strong> press <kbd>REC</kbd>, then <kbd>PLAY</kbd>, and play along with the click. You get two bars of count-in first (<span class="scr">GLO › SEQ › PRECOUNT</span>: off, 1 or 2). With <span class="scr">REC QUANT OFF</span> your timing is kept as you played it.</p>
+<p><strong>Record:</strong> press <kbd>REC</kbd>, then <kbd>PLAY</kbd>, and play along with the click. You get two bars of count-in first (<span class="scr">GLO › SEQ › PRECOUNT</span>: off, 1 or 2). With <span class="scr">REC QUANT OFF</span> your timing is kept as you played it. While recording, <kbd>OCT−</kbd> / <kbd>OCT+</kbd> change the keyboard's octave, and the page follows the step that plays.</p>
 <h4>Drums</h4>
-<p>Press <kbd>SEQ</kbd> again to move on to <span class="scr">SEQ B</span>, the pattern launcher and the drum machine. On the drum page the black keys choose one of 11 instruments: <span class="scr">BD SD LT MT HT RS CP CH OH CY CB</span>. The white keys are its steps. <kbd>REC</kbd> records, <kbd>SHIFT</kbd>+black key clears an instrument. Shape the kit under <span class="scr">EDIT › DRUM KIT</span>: a new kit starts with the 909 bass drum and the sampled hi-hats, the rest is 808.</p>
+<p>Press <kbd>SEQ</kbd> again to move on to <span class="scr">SEQ B</span>, the pattern launcher and the drum machine. On the drum page the black keys choose one of 11 instruments: <span class="scr">BD SD LT MT HT RS CP CH OH CY CB</span>. The white keys are its steps. <kbd>REC</kbd> records, <kbd>SHIFT</kbd>+black key clears an instrument. <kbd>SELECT</kbd> sets the drums' level, shown in the title. Shape the kit under <span class="scr">EDIT › DRUM KIT</span>: a new kit starts with the 909 bass drum and the sampled hi-hats, the rest is 808.</p>
 <p><span class="scr">GLO › SEQ › DRUM OUT</span> sends the drum hits out over MIDI on the drum channel. In the launcher, <span class="scr">MUTE</span> on a row without a sound of its own (a MIDI-only sequencer) mutes its MIDI notes.</p>
 <p><kbd>SAVE</kbd> on a sequencer page saves your patterns. <kbd>SHIFT</kbd>+<kbd>HOME</kbd> undoes a clear or a recording.</p>
 </section><section class="panel" id="parts"><h3><span class="n">5</span>Two parts: layer and split</h3>
@@ -165,13 +165,14 @@
 <li><span class="scr">CHANNELS</span>: part B listens on its own MIDI channel, set under <span class="scr">GLO › MIDI › B CHANNEL › IN</span> (<span class="scr">OMNI</span>: every channel).</li>
 </ul>
 <p>Tap <kbd>HOME</kbd> to switch between part A and B, or use <kbd>SHIFT</kbd>+<kbd>A#4</kbd> for A and <kbd>SHIFT</kbd>+<kbd>F#5</kbd> for B. Part B shows in green. The menus, <kbd>PRESET</kbd> and <kbd>SAVE</kbd> work on the part you see.</p>
-<p>Each part has its own sound, its own HOLD and its own Hybrid Sequencer (<span class="scr">SEQ A</span>, <span class="scr">SEQ B</span>). Delay and reverb are shared and set in part A. <kbd>SHIFT</kbd>+<kbd>ALGO</kbd> sets a part's volume.</p>
+<p>Each part has its own sound, its own HOLD and its own Hybrid Sequencer (<span class="scr">SEQ A</span>, <span class="scr">SEQ B</span>). Delay and reverb are shared and set in part A. <kbd>SHIFT</kbd>+<kbd>ALGO</kbd> sets a part's volume (also <span class="scr">GLO › MULTI › VOL A</span> and <span class="scr">VOL B</span>). <kbd>SAVE</kbd> keeps it.</p>
 </section><section class="panel" id="midi"><h3><span class="n">6</span>MIDI and Bluetooth</h3>
 <p>The FM-1 talks MIDI over USB, Bluetooth and the TRS jack (the jack is an input).</p>
 <ul>
 <li><span class="scr">GLO › MIDI</span>: <span class="scr">A CHANNEL</span> and <span class="scr">B CHANNEL</span>, each with <span class="scr">IN</span> (the channel the part listens to: off, omni, 1-16) and <span class="scr">OUT</span> (where the part's notes go out: off, 1-16; part A: the keys and SEQ A, part B: SEQ B, the split's lower zone, CHANNELS with part B edited), the drum channel (10 as standard), which inputs listen, the out ports, and the clock: internal, external or master.</li>
 <li>External clock: <span class="scr">CLK LOCK</span> (on as standard) keeps the sequencers, the drums and the launcher on the clock's beat, not only its tempo. <span class="scr">CLK OFFSET</span> (-50 to +50 ms, negative is earlier) shifts against that beat. Two FM-1 over Bluetooth: start around -35 ms and adjust by ear.</li>
 <li>A sustain pedal works over MIDI (CC 64), for each part on its own channel.</li>
+<li><span class="scr">GLO › MIDI › MIDI CC</span> lists the controller numbers and what each changes. Go onto a line and press <kbd>REC</kbd>, then move a knob on your controller (learn), or choose the number with <kbd>SELECT</kbd> and press <kbd>REC</kbd>. Every parameter can get a number, one number per parameter. The fixed lines (mod wheel, sustain pedal, all notes off, the part volume CCs) cannot be changed. <span class="scr">RESET ALL</span> puts every line back. A remapped controller moves its parameter like the knob on the device, and the display follows. The list is global: press <kbd>SAVE</kbd> in <kbd>GLO</kbd> to keep it.</li>
 <li>Bluetooth: switch the FM-1 on first, then your device. Go to <span class="scr">GLO › BLUETOOTH › SEARCH</span>, choose the device and press <kbd>REC</kbd>. Next time it connects by itself. <span class="scr">FORGET</span> clears the list.</li>
 <li>Hold <kbd>REC</kbd> for a second to switch Bluetooth on or off.</li>
 <li>Over USB the FM-1 is also a sound card: record it straight into your computer. Turn <kbd>MASTER</kbd> well up.</li>
@@ -186,6 +187,7 @@
 <tr><td><span class="scr">GLO › SEQ › DRUM OUT</span></td><td>drum hits out over MIDI (off as standard).</td></tr>
 <tr><td><span class="scr">GLO › MIDI › CLK LOCK</span></td><td>on as standard.</td></tr>
 <tr><td><span class="scr">GLO › MIDI › CLK OFFSET</span></td><td>0 ms as standard.</td></tr>
+<tr><td><span class="scr">GLO › MIDI › MIDI CC</span></td><td>every line on its own number as standard.</td></tr>
 <tr><td><span class="scr">GLO › AUTO SAVE</span></td><td>off as standard: only <kbd>SAVE</kbd> writes.</td></tr>
 </table>
 <p>Press <kbd>SAVE</kbd> inside <kbd>GLO</kbd> to keep your settings.</p>
@@ -204,9 +206,9 @@
 </main>
 <footer class="site">
 <p>Not affiliated with or endorsed by the manufacturer of the original; all trademarks belong to their owners.</p>
-<p>InfeKt-FM1 1.19.5 by J0KERPACK. The web installer and the firmware's platform layer use
+<p>InfeKt-FM1 1.19.8 by J0KERPACK. The web installer and the firmware's platform layer use
 <a href="https://github.com/charlesvestal/fm1-base">fm1-base</a> and felucca-bsp (MPL-2.0; Charles Vestal, Leo Kuroshita, Chris Farrell and others;
-<a href="downloads/infekt-fm1-1.19.5-fm1-base-src.tar.gz">their source as built</a>). Bluetooth libraries: JieLi AC79 SDK (Apache-2.0).
+<a href="downloads/infekt-fm1-1.19.8-fm1-base-src.tar.gz">their source as built</a>). Bluetooth libraries: JieLi AC79 SDK (Apache-2.0).
 The optional bootloader is <a href="https://github.com/jvitkauskas/m-bootloader">m-bootloader</a> by Julius Vitkauskas (MIT).
 Display font on the device: Barlow Semi Condensed (The Barlow Project Authors), SIL Open Font License 1.1.
 <a href="downloads/LICENSES/README.txt">Licences</a> · <a href="downloads/CREDITS.txt">Credits</a></p>

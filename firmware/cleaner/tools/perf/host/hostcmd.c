@@ -1389,6 +1389,13 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
                mi, sqv.last);
         return 1;
     }
+    if (!strcmp(cmd, "drlevis")) {       /* (1.19.7) a check: the drums' LEVEL is a, and the drums' page's strip (its
+                                          * title while SELECT turns it) was last drawn for a (sqv.lcd); FAIL else */
+        const uint32_t sl = sqv.lcd >> 24 == (0x80u | 10u) ? (sqv.lcd >> 2 & 0xFFu) : 0xFFFFu;
+        printf("%s drlevis %s (level %u, strip %u)\n", set.dr_lev != (uint32_t)atoi(a) || sl != (uint32_t)atoi(a) ? "FAIL" : "  ok",
+               a, (unsigned)set.dr_lev, (unsigned)sl);
+        return 1;
+    }
     if (!strcmp(cmd, "octis")) { printf("%s octis %s (octave %d)\n", set.oct != atoi(a) ? "FAIL" : "  ok", a, set.oct); return 1; }   /* (1.18C17) a check: the octave is a */
     if (!strcmp(cmd, "keydark")) {       /* GLO > KEY LIGHTS off (1) / on (0) / NIGHT (2, 1.18C43); b "save": GLO's settings
                                           * saved (as SAVE, or AUTO SAVE, does) */
@@ -1914,6 +1921,13 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         printf("\n");
         return 1;
     }
+    if (!strcmp(cmd, "pvolis")) {        /* (1.19.7) a check: VOL A is a, VOL B b (pv_vol); FAIL else */
+#ifdef HYB_MULTI
+        printf("%s pvolis %s %s (A %d B %d, saved %d %d)\n", pv_vol[0] != atoi(a) || pv_vol[1] != atoi(b) ? "FAIL" : "  ok", a, b,
+               pv_vol[0], pv_vol[1], set.pv_st[0], set.pv_st[1]);
+#endif
+        return 1;
+    }
     if (!strcmp(cmd, "pvol")) {
 #ifdef HYB_MULTI
         printf("  pvol A %d B %d rtA %.4f rtB %.4f partgA %.4f partgB %.4f ed %d oct %d tempo %d vcc %d %d\n", pv_vol[0], pv_vol[1], (double)S.rt_g, (double)SB.rt_g, (double)S.part_g, (double)SB.part_g, ed_part, set.oct, shadow[TP_BYTE], set.mx_vcc[0], set.mx_vcc[1]);
@@ -2056,15 +2070,46 @@ int app_host_cmd(const char *cmd, const char *a, const char *b, const char *c, c
         return 1;
     }
 #ifdef HYB_MULTI
-    if (!strcmp(cmd, "pmccis")) {        /* (1.19.2) a check: PLAY mode's control a (0 K1 .. 6 ALGO) on MIDI CC b ("OFF":
-                                          * none), LEARN armed for control c (given; "-" none); FAIL else */
-        const int w = strcmp(b, "OFF") ? atoi(b) + 1 : 0;
-        const int bad = set.pm_cc[atoi(a) % 7] != w || (c[0] && pm_learn != (c[0] == '-' ? 0 : atoi(c) + 1));
-        printf("%s pmccis %s %s %s (%d, learn %d)\n", bad ? "FAIL" : "  ok", a, b, c, set.pm_cc[atoi(a) % 7] - 1, pm_learn - 1);
+    if (!strcmp(cmd, "cmis")) {          /* (1.19.6) a check: the MIDI CC map's line a (its fixed number) has number b
+                                          * ("--" none); the list's state c (given: 0, 1 changing, 2 RESET ALL asked);
+                                          * FAIL else */
+        const uint32_t n = cm_num(set.cm, (uint32_t)atoi(a)), w = strcmp(b, "--") ? (uint32_t)atoi(b) : 128u;
+        const int bad = n != w || (c[0] && cm_ed != (uint32_t)atoi(c));
+        printf("%s cmis %s %s %s (%d, state %d)\n", bad ? "FAIL" : "  ok", a, b, c, (int)n, cm_ed);
         return 1;
     }
-    if (!strcmp(cmd, "pmset")) { set.pm_cc[atoi(a) % 7] = (uint8_t)atoi(b); return 1; }   /* (1.19.2) a control's CC
-                                          * as stored (0 OFF, 1 + the controller), any value */
+    if (!strcmp(cmd, "cmraw")) { set.cm[atoi(a) & 127] = (uint8_t)atoi(b); return 1; }   /* (1.19.6) the map's byte for
+                                          * incoming controller a, as stored (0 its own line, 1 + a line, 255 none) */
+    if (!strcmp(cmd, "ccpos")) {         /* (1.19.6) the MIDI CC list's cursor to line a's place ("reset": RESET ALL,
+                                          * "back": BACK) */
+        uint32_t i = 0;
+        if (a[0] == 'r') i = cc_n();
+        else if (a[0] == 'b') i = cc_n() + 1u;
+        else while (i < cc_n() && cc_nth(i) != (uint32_t)atoi(a)) i++;
+        ui.gpos = (uint8_t)i;
+        ui.d_rows = ui.d_lcd = 1;
+        return 1;
+    }
+    if (!strcmp(cmd, "ccis")) {          /* (1.19.6) a check: the MIDI CC list's line for controller line a ("reset",
+                                          * "back") reads b ("_" a space; "*" at its end: the dot), the strip c and d
+                                          * (given); FAIL else */
+        char w[64] = "", x[40] = "", y[40] = "", wb[64] = "", wc[40] = "", wd[40] = "", pre[6] = "";
+        uint32_t k, fl = 0, i = 0;
+        int bad;
+        if (a[0] == 'r') i = cc_n();
+        else if (a[0] == 'b') i = cc_n() + 1u;
+        else while (i < cc_n() && cc_nth(i) != (uint32_t)atoi(a)) i++;
+        for (k = 0; k < 63u && b[k]; k++) wb[k] = b[k] == '_' ? ' ' : b[k];
+        for (k = 0; k < 39u && c[k]; k++) wc[k] = c[k] == '_' ? ' ' : c[k];
+        for (k = 0; k < 39u && d[k]; k++) wd[k] = d[k] == '_' ? ' ' : d[k];
+        cc_item(i, w, pre, &fl);
+        if (fl & LS_DOT) text_cat(w, "*");
+        glo_lcd(x, y);
+        bad = strcmp(w, wb) || (c[0] && strcmp(x, wc)) || (d[0] && strcmp(y, wd));
+        printf("%s ccis %s \"%s\" strip \"%s\" \"%s\" (line %u of %u)\n", bad ? "FAIL" : "  ok", a, w, x, y, (unsigned)i,
+               (unsigned)cc_n() + 2u);
+        return 1;
+    }
     if (!strcmp(cmd, "peis")) {          /* (1.19.2) a check: the assignment editor's line a reads b ("_" a space); its
                                           * strip c and d (given); FAIL else */
         char w[48] = "", x[40] = "", y[40] = "", wb[48] = "", wc[40] = "", wd[40] = "", pre[6] = "";

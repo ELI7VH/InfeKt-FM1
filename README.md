@@ -1,6 +1,6 @@
 # InfeKt-FM1
 
-*A virtual analog synthesizer firmware for the M-VAVE FM-1, by J0KERPACK.* Version 1.19.5.
+*A virtual analog synthesizer firmware for the M-VAVE FM-1, by J0KERPACK.* Version 1.19.8.
 
 It was about time: the InfeKt-FM1 is finally released. It turns the small FM-1 into a full virtual analog
 synthesizer whose sound comes very close to the original, and it is **compatible with Virus patches**.
@@ -42,7 +42,7 @@ FLASH B36014). On those newer units the optional m-bootloader is not installed (
 - Drum machine with 11 instruments
 - Second sequencer as a MIDI-only sequencer
 - MIDI over USB, Bluetooth and the TRS jack
-- Sustain pedal, MIDI learn for the PLAY-mode controls
+- Sustain pedal, MIDI learn for any parameter (GLO > MIDI > MIDI CC)
 - Drum hits out over MIDI
 - Clock lock to an external MIDI clock
 - Web editor and patch manager for your own banks
@@ -64,11 +64,11 @@ See the [downloads](downloads/) folder (also linked from the website's Home page
 
 | File | What |
 | --- | --- |
-| [`infekt-fm1_installer_1.19.5.zip`](downloads/infekt-fm1_installer_1.19.5.zip) | the installer package: firmware, installer page for offline use, quickstart PDFs, rescue tools, licences |
-| [`infekt-fm1-1.19.5-multi-ble.fwsc`](downloads/infekt-fm1-1.19.5-multi-ble.fwsc) | the firmware alone: no factory banks or wavetables inside (they are included in the installer package and the Install page) |
+| [`infekt-fm1_installer_1.19.8.zip`](downloads/infekt-fm1_installer_1.19.8.zip) | the installer package: firmware, installer page for offline use, quickstart PDFs, rescue tools, licences |
+| [`infekt-fm1-1.19.8-multi-ble.fwsc`](downloads/infekt-fm1-1.19.8-multi-ble.fwsc) | the firmware alone: no factory banks or wavetables inside (they are included in the installer package and the Install page) |
 | [`InfeKt-FM1_Quickstart_EN.pdf`](downloads/InfeKt-FM1_Quickstart_EN.pdf), [`InfeKt-FM1_Quickstart_DE.pdf`](downloads/InfeKt-FM1_Quickstart_DE.pdf) | the two-page quickstart (English, German) |
 | [`LICENSES/`](downloads/LICENSES/README.txt), [`CREDITS.txt`](downloads/CREDITS.txt) | licences and credits |
-| [`infekt-fm1-1.19.5-fm1-base-src.tar.gz`](downloads/infekt-fm1-1.19.5-fm1-base-src.tar.gz) | the source of the MPL-2.0 platform files (fm1-base, felucca-bsp) as built ([SOURCE.txt](downloads/SOURCE.txt)) |
+| [`infekt-fm1-1.19.8-fm1-base-src.tar.gz`](downloads/infekt-fm1-1.19.8-fm1-base-src.tar.gz) | the source of the MPL-2.0 platform files (fm1-base, felucca-bsp) as built ([SOURCE.txt](downloads/SOURCE.txt)) |
 
 The website itself: `index.html`, `guide.html`, `install.html` and `app.html` (the installer page) in this repository.
 
@@ -90,7 +90,7 @@ Want to support this project? Want more synths? An SMK-37 port? → **https://ko
 - **fm1-base** (Charles Vestal, with code by Leo Kuroshita and Chris Farrell), <https://github.com/charlesvestal/fm1-base>,
   and **felucca-bsp** (Leo Kuroshita), <https://github.com/hugelton/felucca-bsp>: the firmware's platform layer and the
   web installer's core, under the Mozilla Public License 2.0. Their source as used in this build, with the changes made
-  to them: [`infekt-fm1-1.19.5-fm1-base-src.tar.gz`](downloads/infekt-fm1-1.19.5-fm1-base-src.tar.gz).
+  to them: [`infekt-fm1-1.19.8-fm1-base-src.tar.gz`](downloads/infekt-fm1-1.19.8-fm1-base-src.tar.gz).
 - **JieLi AC79 SDK** parts and Bluetooth libraries (Zhuhai Jieli Technology Co., Ltd.), Apache License 2.0
   ([text](downloads/LICENSES/Apache-2.0.txt)).
 - **m-bootloader 1.2** by Julius Vitkauskas, <https://github.com/jvitkauskas/m-bootloader>, MIT licence
