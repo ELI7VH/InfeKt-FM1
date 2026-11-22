@@ -65,7 +65,7 @@ See the [downloads](downloads/) folder (also linked from the website's Home page
 | File | What |
 | --- | --- |
 | [`infekt-fm1_installer_1.19.5.zip`](downloads/infekt-fm1_installer_1.19.5.zip) | the installer package: firmware, installer page for offline use, quickstart PDFs, rescue tools, licences |
-| [`infekt-fm1-1.19.5-multi-ble.fwsc`](downloads/infekt-fm1-1.19.5-multi-ble.fwsc) | the firmware alone |
+| [`infekt-fm1-1.19.5-multi-ble.fwsc`](downloads/infekt-fm1-1.19.5-multi-ble.fwsc) | the firmware alone: no factory banks or wavetables inside (the Install page installs them separately) |
 | [`InfeKt-FM1_Quickstart_EN.pdf`](downloads/InfeKt-FM1_Quickstart_EN.pdf), [`InfeKt-FM1_Quickstart_DE.pdf`](downloads/InfeKt-FM1_Quickstart_DE.pdf) | the two-page quickstart (English, German) |
 | [`LICENSES/`](downloads/LICENSES/README.txt), [`CREDITS.txt`](downloads/CREDITS.txt) | licences and credits |
 | [`infekt-fm1-1.19.5-fm1-base-src.tar.gz`](downloads/infekt-fm1-1.19.5-fm1-base-src.tar.gz) | the source of the MPL-2.0 platform files (fm1-base, felucca-bsp) as built ([SOURCE.txt](downloads/SOURCE.txt)) |
