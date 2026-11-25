@@ -11,14 +11,8 @@ People were part of this, not only scripts. What numbers alone do not settle was
 comparisons with the reference: for example the oscillators' start phases, the modulation of the reverb and the
 behaviour of the envelopes.
 
-Two kinds of target were rendered:
-
-- **the reference**: renders of the reference instrument's sound (`MLAB_REFENG`, `RV_REF`: any executable with the
-  lab's command line);
-- **the development engine**: an earlier engine of this project that matches the reference closely; used through
-  the same command line where a long series of renders was needed (`HYB` in `mlab.py`, `RV_OLD` in `tools/measure/reverb/rvlib.py`).
-
-Neither target is part of this release, so the scripts below need one supplied to be run again. "Null" is the RMS of
+The targets of the comparisons are not part of this release, so the scripts below need one supplied to be run again.
+"Null" is the RMS of
 the difference of two renders against the signal; "band" a third-octave band level.
 
 ## 1. Parts of the engine
