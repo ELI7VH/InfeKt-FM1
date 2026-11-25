@@ -2,16 +2,21 @@
 # Where the engine's numbers come from
 
 The engine reproduces the sound of a hardware synthesizer ("the reference", not named here). The rule: every number
-in the engine is either an own design choice or the result of an audio measurement. A measurement is a black-box
-render: an engine is an executable driven through the lab's command line (`tools/measure/mlab.py`: patch, notes,
-MIDI in; a stereo WAV out), and only its audio output is analysed. No code, table or memory of the reference is used.
+in the engine is an own design choice, the result of a measurement of the reference with audio and MIDI data, or a
+fine-tuning by ear. For a measurement an engine is an executable driven through the lab's command line
+(`tools/measure/mlab.py`: patch, notes, MIDI in; a stereo WAV out), and its audio output is analysed. No code, table
+or memory of the reference is used.
+
+People were part of this, not only scripts. What numbers alone do not settle was fine-tuned by ear, in listening
+comparisons with the reference: for example the oscillators' start phases, the modulation of the reverb and the
+behaviour of the envelopes.
 
 Two kinds of target were rendered:
 
 - **the reference**: renders of the reference instrument's sound (`MLAB_REFENG`, `RV_REF`: any executable with the
   lab's command line);
-- **the development engine**: an earlier engine of this project that matches the reference closely; used as a black
-  box where a long series of renders was needed (`HYB` in `mlab.py`, `RV_OLD` in `tools/measure/reverb/rvlib.py`).
+- **the development engine**: an earlier engine of this project that matches the reference closely; used through
+  the same command line where a long series of renders was needed (`HYB` in `mlab.py`, `RV_OLD` in `tools/measure/reverb/rvlib.py`).
 
 Neither target is part of this release, so the scripts below need one supplied to be run again. "Null" is the RMS of
 the difference of two renders against the signal; "band" a third-octave band level.
