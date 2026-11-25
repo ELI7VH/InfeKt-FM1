@@ -16,7 +16,7 @@ binary libraries (as used through fm1-base): `LICENSE-ADDITIONAL-PERMISSION.md`.
 ## Layout
 
     firmware/cleaner/engine/   the synthesizer engine (C, single-precision float, no allocation in the audio path)
-    firmware/cleaner/fm1/      the FM-1 app and its build scripts (on fm1-base); fm1/hat/: the sampled hi-hat's tables
+    firmware/cleaner/fm1/      the FM-1 app and its build scripts (on fm1-base); fm1/hat/: the drum kit's hi-hat tables
     firmware/cleaner/host/     the host renderer (build/engine) and test programs
     firmware/cleaner/tools/    measurement and fit scripts (measure/), performance and host-simulator tests (perf/),
                                the web page and its tests (web/), the hi-hat table generator (drums/), the INIT patch
