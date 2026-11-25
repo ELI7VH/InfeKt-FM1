@@ -25,17 +25,21 @@ binary libraries (as used through fm1-base): `LICENSE-ADDITIONAL-PERMISSION.md`.
 
 ## How the engine was made
 
-Every number in the engine comes from an audio measurement, not from another instrument's code, tables or memory. A
-measurement renders an engine as a black box through a command-line renderer (audio in, audio out: a note, a
-parameter sweep, a test signal through the filter or the effects), analyses the output (spectra, levels, impulse
-responses, fitted curves), and writes the fitted numbers into the engine's tables. The scripts in
+The engine was made by measuring the reference instrument with audio and MIDI data: notes, controller movements
+and parameter sweeps were played to it, test signals were sent through its filters and effects, and the resulting
+audio was analysed (spectra, levels, impulse responses, fitted curves). The fitted numbers went into the engine's
+tables. No code, tables or memory of another instrument are part of the engine. The scripts in
 `firmware/cleaner/tools/measure/` reproduce each fit; each states its method at its top.
+
+People were part of this, not only scripts. What numbers alone do not settle was fine-tuned by ear, in listening
+comparisons with the reference: for example the oscillators' start phases, the modulation of the reverb and the
+behaviour of the envelopes.
 
 `PROVENANCE.md` lists the components one by one: what was designed (for example the oscillator waves, the reverb, the
 band-limited oscillator), what was measured and fitted (filter laws, saturation and distortion curves, LFO rates, FM
 index, the phase rules), and how close the result is to the target (null tests, level and band differences). The
-targets measured during development (renders of the reference instrument and an earlier development engine, both
-used as black boxes) are not part of this release; where a part's measuring script is not included, PROVENANCE.md
+targets measured during development (recordings and renders of the reference instrument and of an earlier
+development engine) are not part of this release; where a part's measuring script is not included, PROVENANCE.md
 says so.
 
 ## Building
