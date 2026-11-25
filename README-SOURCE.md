@@ -38,9 +38,8 @@ behaviour of the envelopes.
 `PROVENANCE.md` lists the components one by one: what was designed (for example the oscillator waves, the reverb, the
 band-limited oscillator), what was measured and fitted (filter laws, saturation and distortion curves, LFO rates, FM
 index, the phase rules), and how close the result is to the target (null tests, level and band differences). The
-targets measured during development (recordings and renders of the reference instrument and of an earlier
-development engine) are not part of this release; where a part's measuring script is not included, PROVENANCE.md
-says so.
+recordings made during development are not part of this release; where a part's measuring script is not included,
+PROVENANCE.md says so.
 
 ## Building
 
@@ -59,8 +58,8 @@ host build.
 ## Not included, and why
 
 - Factory banks: the firmware has none (banks A and B stay empty; the player's six banks hold the patches).
-- The development notes, the measured targets and their results, the test banks used during development, and the
-  host tests that played them: private working material, or other people's sounds.
+- The development notes, the recordings and measurement results, the test banks used during development, and the
+  host tests that played them: working material, or other people's sounds.
 
 The firmware links JieLi's binary Bluetooth libraries from the AC79 SDK (Apache-2.0) through fm1-base; see
 `LICENSE-ADDITIONAL-PERMISSION.md`.
