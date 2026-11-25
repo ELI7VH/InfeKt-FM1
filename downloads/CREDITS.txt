@@ -10,7 +10,7 @@ Sounds
 Factory banks A and B (installed by the web page, optional):
   Manuel Schleis (Vengeance Sound, https://www.vengeance-sound.com/)
   Alan Marcero (https://alanmarcero.com/)
-  Sete
+  Sete (https://www.ownsound.space/setednb)
 Wavetables (nine waves, installed by the web page, optional): Sete.
 They are distributed with InfeKt-FM1 with their authors' permission.
 

@@ -79,7 +79,7 @@ Special thanks go to three sound designers. With their sound designs a synth lik
 - Manuel Schleis ([Vengeance Sound](https://www.vengeance-sound.com/)), known worldwide for his legendary soundsets,
   producer sound packs and VST plug-ins
 - [Alan Marcero](https://alanmarcero.com/), sound designer and trance producer
-- Sete, sound designer
+- [Sete](https://www.ownsound.space/setednb), sound designer
 
 ## Support
 
